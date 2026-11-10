@@ -81,24 +81,19 @@ const initialMods = [
   }
 ];
 
-const archiveSignatures = {
-  zip: [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06], [0x50, 0x4b, 0x07, 0x08]],
-  rar: [[0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00], [0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00]],
-  "7z": [[0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]]
-};
 const fileSignatures = {
   png: [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
   jpg: [[0xff, 0xd8, 0xff]],
   jpeg: [[0xff, 0xd8, 0xff]],
   bmp: [[0x42, 0x4d]]
 };
-const blockedFileExtensions = new Set([
-  "exe", "msi", "msp", "com", "scr", "bat", "cmd", "ps1", "vbs", "vbe",
-  "jse", "wsf", "wsh", "hta", "js", "mjs", "cjs",
-  "svg", "url", "lnk", "website", "webloc", "reg", "sh", "bash", "zsh",
-  "jar", "appx", "msix", "zip", "rar", "7z"
+const riskyFileExtensions = new Set([
+  "asi", "dll", "cs", "lua", "cleo", "exe", "msi", "msp", "com", "scr",
+  "bat", "cmd", "ps1", "vbs", "vbe", "jse", "wsf", "wsh", "hta", "js",
+  "mjs", "cjs", "html", "htm", "xhtml", "svg", "url", "lnk", "website",
+  "webloc", "reg", "sh", "bash", "zsh", "jar", "appx", "msix", "zip",
+  "rar", "7z"
 ]);
-const codeExtensions = new Set(["asi", "dll", "cs", "lua", "cleo", "html", "htm", "xhtml"]);
 const palettes = {
   Visual: ["#2b3123", "#d0f66d", "V"],
   UI: ["#252d32", "#a9d9e5", "⌗"],
@@ -364,21 +359,6 @@ function matchesSignature(bytes, signatures) {
 
 async function analyzeFile(file) {
   const extension = file.name.split(".").pop().toLowerCase();
-
-  if (archiveSignatures[extension]) {
-    const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
-    if (!matchesSignature(header, archiveSignatures[extension])) {
-      throw new Error(`Isi berkas tidak cocok dengan format .${extension.toUpperCase()}.`);
-    }
-  }
-
-  if (fileSignatures[extension]) {
-    const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
-    if (!matchesSignature(header, fileSignatures[extension])) {
-      throw new Error(`Isi berkas tidak cocok dengan format .${extension.toUpperCase()}.`);
-    }
-  }
-
   if (!crypto.subtle) throw new Error("Browser ini tidak mendukung analisis SHA-256. Buka situs melalui koneksi aman (HTTPS).");
   const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
   const sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -443,9 +423,6 @@ async function analyzeFolder(fileList, previewFile) {
       throw new Error(`Folder berisi video yang tidak dapat diunggah: ${file.name}`);
     }
     const extension = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "";
-    if (blockedFileExtensions.has(extension)) {
-      throw new Error(`Folder berisi file yang diblokir demi keamanan (.${extension}). Hapus file tersebut dan ekstrak arsip mod sebelum mengunggah.`);
-    }
 
     const relativePath = getRelativePath(file);
     if (folderName && folderName !== relativePath.root) {
@@ -459,7 +436,7 @@ async function analyzeFolder(fileList, previewFile) {
 
     const result = await analyzeFile(file);
     analyzedFiles.push({ path, file, sha256: result.sha256 });
-    if (codeExtensions.has(extension)) riskyFiles.push(path);
+    if (riskyFileExtensions.has(extension)) riskyFiles.push(path);
     totalSize += file.size;
     fingerprintParts.push(`${path}\0${result.sha256}\0`);
   }
@@ -484,7 +461,7 @@ function showAnalysis(folder) {
     <span>Folder: ${escapeHtml(folder.folderName)} · ${folder.count} file · ${formatSize(folder.totalSize)}</span>
     <span>SHA-256 folder: <code>${folder.sha256}</code></span>
     ${folder.riskyFiles.length
-      ? `<span class="analysis-warning">Ditemukan file aktif atau komponen yang dapat menjalankan kode: ${folder.riskyFiles.map(escapeHtml).join(", ")}. Situs tidak memindai isi file seperti antivirus. Verifikasi sumbernya dan jangan buka file HTML dari sumber yang tidak dipercaya.</span>`
+      ? `<span class="analysis-warning">Ditemukan file atau arsip yang dapat menjalankan kode atau memuat konten aktif: ${folder.riskyFiles.map(escapeHtml).join(", ")}. Situs menyimpan file tanpa menjalankannya dan tidak memindai isi seperti antivirus. Verifikasi sumber sebelum mengunduh atau membuka hasilnya.</span>`
       : ""}
     <span class="analysis-warning">Pemeriksaan browser bukan antivirus. Jangan jalankan mod atau ikuti tautan dari sumber yang tidak dipercaya.</span>
   `;
