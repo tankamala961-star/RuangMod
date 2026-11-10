@@ -534,11 +534,12 @@ function createZipHeader(signature, byteLength) {
   return header;
 }
 
-async function createZip(files) {
+async function createZip(files, rootFolder) {
   if (files.length > 0xffff) throw new Error("Folder berisi terlalu banyak file untuk format ZIP standar.");
   if (typeof CompressionStream === "undefined") throw new Error("Browser ini tidak mendukung pembuatan ZIP. Coba browser versi terbaru.");
 
   const encoder = new TextEncoder();
+  const zipRoot = rootFolder ? `${sanitizeFilename(rootFolder)}/` : "";
   const localParts = [];
   const centralParts = [];
   let localOffset = 0;
@@ -550,8 +551,9 @@ async function createZip(files) {
     if (entry.file.size > 0xffffffff || localOffset > 0xffffffff) {
       throw new Error("Folder terlalu besar untuk format ZIP standar di browser ini.");
     }
-    const filename = encoder.encode(entry.path);
-    if (filename.length > 0xffff) throw new Error(`Nama file terlalu panjang untuk ZIP: ${entry.path}`);
+    const archivePath = `${zipRoot}${entry.path}`;
+    const filename = encoder.encode(archivePath);
+    if (filename.length > 0xffff) throw new Error(`Nama file terlalu panjang untuk ZIP: ${archivePath}`);
     const crc = await calculateCrc32(entry.file);
     const compressedReader = entry.file.stream().pipeThrough(new CompressionStream("deflate-raw")).getReader();
     const compressedChunks = [];
@@ -618,7 +620,7 @@ async function downloadUploadedMod(id) {
     const mod = await getUploadedMod(id);
     if (!mod) throw new Error("Mod tidak ditemukan di penyimpanan browser ini.");
     if (Array.isArray(mod.files)) {
-      const zip = await createZip(mod.files);
+      const zip = await createZip(mod.files, mod.folderName || mod.name);
       createDownload(zip, `${sanitizeFilename(mod.name)}.zip`);
     } else if (mod.file) {
       createDownload(mod.file, mod.file.name);
@@ -791,6 +793,7 @@ uploadForm.addEventListener("submit", async (event) => {
     category,
     description,
     version,
+    folderName: analyzedFolder.folderName,
     size: formatSize(analyzedFolder.totalSize),
     symbol,
     background,
