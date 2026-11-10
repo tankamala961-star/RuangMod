@@ -220,8 +220,43 @@ function getPreviewUrl(mod) {
 
 function renderMods() {
   const query = searchInput.value.trim().toLocaleLowerCase("id");
+  if (activeCategory === "Semua") {
+    const visibleCategories = Object.keys(palettes).filter((category) => category.toLocaleLowerCase("id").includes(query));
+    grid.innerHTML = visibleCategories.map((category) => {
+      const [background, color, symbol] = palettes[category];
+      const modCount = mods.filter((mod) => mod.category === category).length;
+      return `
+        <article class="mod-card collection-card">
+          <div class="card-art" style="--card-bg:${background};--card-color:${color}">
+            <span class="card-symbol" aria-hidden="true">${escapeHtml(symbol)}</span>
+          </div>
+          <div class="card-body">
+            <div class="card-topline">
+              <span class="category-tag">KOLEKSI MOD</span>
+              <span class="folder-tag">${modCount} MOD</span>
+            </div>
+            <h3>${escapeHtml(category)}</h3>
+            <p>Kumpulan mod kategori ${escapeHtml(category)}.</p>
+            <div class="card-actions">
+              <button class="details-button" type="button" data-open-category="${escapeHtml(category)}">Buka koleksi ↗</button>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join("");
+
+    resultsCount.textContent = `${visibleCategories.length} KOLEKSI DITEMUKAN`;
+    emptyState.hidden = visibleCategories.length > 0;
+    grid.hidden = visibleCategories.length === 0;
+    emptyStateIcon.textContent = "⌕";
+    emptyStateTitle.textContent = "Koleksi tidak ditemukan.";
+    emptyStateDescription.textContent = "Coba kata kunci koleksi lain.";
+    createFirstModButton.hidden = true;
+    return;
+  }
+
   const visibleMods = mods.filter((mod) => {
-    const matchesCategory = activeCategory === "Semua" || mod.category === activeCategory;
+    const matchesCategory = mod.category === activeCategory;
     const searchableText = `${mod.name} ${mod.category} ${mod.description} ${mod.author || ""}`.toLocaleLowerCase("id");
     return matchesCategory && searchableText.includes(query);
   });
@@ -609,6 +644,14 @@ createFirstModButton.addEventListener("click", () => {
 });
 
 grid.addEventListener("click", (event) => {
+  const categoryButton = event.target.closest("[data-open-category]");
+  if (categoryButton) {
+    activeCategory = categoryButton.dataset.openCategory;
+    searchInput.value = "";
+    renderFilters();
+    renderMods();
+    return;
+  }
   const downloadButton = event.target.closest("[data-download-id]");
   if (downloadButton) {
     downloadUploadedMod(downloadButton.dataset.downloadId);
