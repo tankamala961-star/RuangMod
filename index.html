@@ -66,9 +66,12 @@
         <p id="results-count" class="results-count" aria-live="polite"></p>
         <div id="mod-grid" class="mod-grid"></div>
         <div id="empty-state" class="empty-state" hidden>
-          <span aria-hidden="true">⌕</span>
-          <h3>Belum ada mod yang cocok.</h3>
-          <p>Coba kata kunci atau kategori lain.</p>
+          <span id="empty-state-icon" class="empty-state-icon" aria-hidden="true">⌕</span>
+          <h3 id="empty-state-title">Belum ada mod yang cocok.</h3>
+          <p id="empty-state-description">Coba kata kunci atau kategori lain.</p>
+          <button id="create-first-mod" class="primary-button create-first-mod" type="button" hidden>
+            <span class="plus-icon" aria-hidden="true">＋</span> Buat mod pertama di RuangMod
+          </button>
         </div>
       </section>
 

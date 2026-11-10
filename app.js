@@ -89,6 +89,10 @@ const filters = document.querySelector("#category-filters");
 const searchInput = document.querySelector("#search-input");
 const resultsCount = document.querySelector("#results-count");
 const emptyState = document.querySelector("#empty-state");
+const emptyStateIcon = document.querySelector("#empty-state-icon");
+const emptyStateTitle = document.querySelector("#empty-state-title");
+const emptyStateDescription = document.querySelector("#empty-state-description");
+const createFirstModButton = document.querySelector("#create-first-mod");
 const dialog = document.querySelector("#mod-dialog");
 const uploadForm = document.querySelector("#upload-form");
 const fileInput = document.querySelector("#upload-file");
@@ -155,7 +159,7 @@ function formatSize(bytes) {
 }
 
 function renderFilters() {
-  const categories = ["Semua", ...new Set(mods.map((mod) => mod.category))];
+  const categories = ["Semua", ...Object.keys(palettes)];
   if (!categories.includes(activeCategory)) activeCategory = "Semua";
   filters.innerHTML = categories.map((category) => `
     <button class="filter-button" type="button" data-category="${escapeHtml(category)}" aria-pressed="${category === activeCategory}">
@@ -178,7 +182,7 @@ function renderMods() {
       ? `<button class="download-button" type="button" data-download-id="${escapeHtml(mod.fileId)}">Unduh ↓</button>`
       : mod.downloadUrl
         ? `<a class="download-button" href="${escapeHtml(mod.downloadUrl)}" download>Unduh ↓</a>`
-        : `<button class="download-button" type="button" data-details="${escapeHtml(mod.id)}">Buka ↗</button>`;
+        : "";
     return `
       <article class="mod-card">
         <div class="card-art" style="--card-bg:${background};--card-color:${color}">
@@ -191,7 +195,7 @@ function renderMods() {
           <p>${escapeHtml(mod.description)}</p>
           ${mod.author ? `<p class="card-author">Dibagikan oleh ${escapeHtml(mod.author)}</p>` : ""}
           <div class="card-actions">
-            <button class="details-button" type="button" data-details="${escapeHtml(mod.id)}">Detail mod ↗</button>
+            <button class="details-button" type="button" data-details="${escapeHtml(mod.id)}">Buka ↗</button>
             ${downloadAction}
           </div>
         </div>
@@ -202,6 +206,15 @@ function renderMods() {
   resultsCount.textContent = `${String(visibleMods.length).padStart(2, "0")} MOD DITEMUKAN`;
   emptyState.hidden = visibleMods.length > 0;
   grid.hidden = visibleMods.length === 0;
+  const isEmptyArchive = visibleMods.length === 0 && !query && activeCategory !== "Semua";
+  emptyStateIcon.textContent = isEmptyArchive ? "＋" : "⌕";
+  emptyStateTitle.textContent = isEmptyArchive
+    ? `Belum ada mod di arsip ${activeCategory}.`
+    : "Belum ada mod yang cocok.";
+  emptyStateDescription.textContent = isEmptyArchive
+    ? "Jadilah yang pertama membagikan mod ke arsip ini."
+    : "Coba kata kunci atau kategori lain.";
+  createFirstModButton.hidden = !isEmptyArchive;
 }
 
 function showDetails(mod) {
@@ -309,6 +322,13 @@ filters.addEventListener("click", (event) => {
 });
 
 searchInput.addEventListener("input", renderMods);
+
+createFirstModButton.addEventListener("click", () => {
+  const categorySelect = uploadForm.elements.namedItem("category");
+  if (activeCategory !== "Semua") categorySelect.value = activeCategory;
+  document.querySelector("#bagikan").scrollIntoView({ behavior: "smooth" });
+  uploadForm.elements.namedItem("name").focus({ preventScroll: true });
+});
 
 grid.addEventListener("click", (event) => {
   const downloadButton = event.target.closest("[data-download-id]");

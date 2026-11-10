@@ -84,10 +84,13 @@ kbd { padding: 2px 6px; border: 1px solid var(--line); border-radius: 3px; color
 .download-button { padding: 7px 10px; border: 1px solid #41453a; border-radius: 3px; background: transparent; color: var(--muted); font-size: 9px; cursor: pointer; }
 .download-button:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
 .download-button:disabled { cursor: not-allowed; opacity: .55; }
-.empty-state { padding: 55px 20px; text-align: center; border: 1px dashed var(--line); border-radius: 5px; }
-.empty-state > span { color: var(--accent); font-size: 30px; }
+.empty-state { display: flex; min-height: 270px; padding: 40px 20px; align-items: center; justify-content: center; flex-direction: column; text-align: center; border: 1px dashed var(--line); border-radius: 5px; background: radial-gradient(ellipse at center, #c9f36a0b, transparent 70%); }
+.empty-state[hidden] { display: none; }
+.empty-state-icon { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid #c9f36a55; border-radius: 50%; color: var(--accent); font: 28px var(--sans); }
 .empty-state h3 { margin: 10px 0 5px; font: 600 17px var(--display); }
-.empty-state p { margin: 0; color: var(--muted); font-size: 12px; }
+.empty-state p { margin: 0 0 18px; color: var(--muted); font-size: 12px; }
+.create-first-mod { gap: 8px; }
+.plus-icon { font-size: 17px; line-height: 1; }
 .about { padding-top: 60px; padding-bottom: 76px; border-top: 1px solid var(--line); }
 .about-content { display: grid; grid-template-columns: 1fr 1fr; gap: 12%; align-items: start; }
 .about-content h2 { font-size: 42px; }
