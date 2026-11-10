@@ -30,6 +30,16 @@ const initialMods = [
     downloadUrl: ""
   },
   {
+    id: "vehicle-pack",
+    name: "Vehicle Pack SA-MP",
+    category: "Kendaraan",
+    description: "Koleksi kendaraan kustom untuk memperbarui tampilan kendaraan di SA-MP. Baca petunjuk pemasangan dan pastikan kompatibel dengan server yang digunakan.",
+    version: "v1.0",
+    size: "Belum tersedia",
+    symbol: "V",
+    downloadUrl: ""
+  },
+  {
     id: "street-audio",
     name: "Street Audio Pack",
     category: "Audio",
@@ -81,6 +91,7 @@ const palettes = {
   UI: ["#252d32", "#a9d9e5", "⌗"],
   Tools: ["#332a22", "#f4b77a", "⌁"],
   Audio: ["#32252c", "#efa8c5", "♫"],
+  Kendaraan: ["#292d24", "#c5e777", "V"],
   Gameplay: ["#30272b", "#f1a6a6", "G"],
   Lainnya: ["#252b35", "#adc2f5", "✳"]
 };
