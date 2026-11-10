@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10120f">
+    <meta name="description" content="Jelajahi koleksi mod komunitas untuk SA-MP.">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data:; connect-src 'self'; form-action 'self'; frame-src 'none'; upgrade-insecure-requests">
+    <title>RuangMod — Mod SA-MP untuk komunitas</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#" aria-label="RuangMod, beranda">
+        <span class="brand-mark" aria-hidden="true">R</span>
+        <span>ruang<span class="brand-accent">mod</span></span>
+      </a>
+      <nav class="main-nav" aria-label="Navigasi utama">
+        <a href="#koleksi">Koleksi</a>
+        <a href="#bagikan">Bagikan mod</a>
+        <a href="#tentang">Tentang</a>
+      </nav>
+      <a class="header-cta" href="#koleksi">Jelajahi mod <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-content">
+          <p class="eyebrow"><span class="status-dot"></span> MOD PILIHAN KOMUNITAS</p>
+          <h1 id="hero-title">Bikin dunia<br>SA-MP <span>lebih hidup.</span></h1>
+          <p class="hero-description">Temukan mod, visual, dan tools buatan komunitas untuk pengalaman bermain yang lebih seru.</p>
+          <a class="primary-button" href="#koleksi">Lihat koleksi <span aria-hidden="true">↓</span></a>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="art-grid"></div>
+          <div class="art-ring ring-one"></div>
+          <div class="art-ring ring-two"></div>
+          <div class="art-cross">✳</div>
+          <div class="art-label">COMMUNITY<br>MODS / 2026</div>
+          <div class="art-index">01 — 04</div>
+        </div>
+        <div class="hero-foot"><span>UNTUK KOMUNITAS SA-MP</span><span>BUATAN KOMUNITAS, UNTUK KOMUNITAS</span></div>
+      </section>
+
+      <section class="collection section-wrap" id="koleksi" aria-labelledby="collection-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">JELAJAHI ARSIP</p>
+            <h2 id="collection-title">Koleksi mod<span class="brand-accent">.</span></h2>
+          </div>
+          <p class="collection-note">Temukan tambahan baru untuk petualanganmu.</p>
+        </div>
+
+        <div class="toolbar">
+          <label class="search-box">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <span class="visually-hidden">Cari mod</span>
+            <input id="search-input" type="search" placeholder="Cari mod..." autocomplete="off">
+            <kbd>/</kbd>
+          </label>
+          <div id="category-filters" class="filters" aria-label="Filter kategori"></div>
+        </div>
+
+        <p id="results-count" class="results-count" aria-live="polite"></p>
+        <div id="mod-grid" class="mod-grid"></div>
+        <div id="empty-state" class="empty-state" hidden>
+          <span aria-hidden="true">⌕</span>
+          <h3>Belum ada mod yang cocok.</h3>
+          <p>Coba kata kunci atau kategori lain.</p>
+        </div>
+      </section>
+
+      <section class="share section-wrap" id="bagikan" aria-labelledby="share-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">KONTRIBUSI KOMUNITAS</p>
+            <h2 id="share-title">Bagikan mod<span class="brand-accent">.</span></h2>
+          </div>
+          <p class="collection-note">Periksa berkas sebelum menambahkannya ke katalog.</p>
+        </div>
+
+        <p class="storage-notice">Demo ini menyimpan mod hanya di browser dan perangkat ini. Pemeriksaan di browser bukan antivirus; jangan pasang mod yang tidak dipercaya. Agar bisa dibagikan dengan aman ke semua pengunjung, situs memerlukan server unggah dengan pemindaian malware.</p>
+        <form id="upload-form" class="upload-form">
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Nama mod</span>
+              <input name="name" type="text" maxlength="60" required placeholder="Contoh: HUD Minimalis">
+            </label>
+            <label class="form-field">
+              <span>Nama pembuat</span>
+              <input name="author" type="text" maxlength="40" required placeholder="Nama atau alias">
+            </label>
+            <label class="form-field">
+              <span>Kategori</span>
+              <select name="category" required>
+                <option value="Visual">Visual</option>
+                <option value="UI">UI</option>
+                <option value="Tools">Tools</option>
+                <option value="Audio">Audio</option>
+                <option value="Gameplay">Gameplay</option>
+                <option value="Lainnya">Lainnya</option>
+              </select>
+            </label>
+            <label class="form-field">
+              <span>Versi</span>
+              <input name="version" type="text" maxlength="20" required placeholder="Contoh: v1.0">
+            </label>
+            <label class="form-field form-field-wide">
+              <span>Deskripsi dan petunjuk pemasangan</span>
+              <textarea name="description" rows="4" maxlength="500" required placeholder="Jelaskan isi mod, kompatibilitas, dan cara memasangnya."></textarea>
+            </label>
+            <label class="form-field form-field-wide">
+              <span>Berkas mod (bukan video)</span>
+              <input id="upload-file" name="file" type="file" required accept=".zip,.rar,.7z,.asi,.cs,.lua,.ini,.cfg,.txd,.dff,.png,.jpg,.jpeg,.bmp">
+              <small>ZIP, RAR, 7Z, ASI, CS, LUA, INI, CFG, TXD, DFF, PNG, JPG, atau BMP · Maks. 100 MB. Berkas mod dapat menjalankan kode di game; unggah hanya karya yang kamu percaya.</small>
+            </label>
+          </div>
+          <div class="analysis-panel" id="analysis-result" aria-live="polite" hidden></div>
+          <div class="upload-actions">
+            <button class="secondary-button" id="analyze-button" type="button">Analisis berkas</button>
+            <button class="primary-button" id="publish-button" type="submit" disabled>Tambahkan ke katalog <span aria-hidden="true">↑</span></button>
+          </div>
+          <p id="upload-status" class="upload-status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="about section-wrap" id="tentang">
+        <p class="eyebrow">TENTANG RUANGMOD</p>
+        <div class="about-content">
+          <h2>Ruang untuk<br>karya komunitas.</h2>
+          <div>
+            <p>RuangMod adalah katalog komunitas untuk menemukan modifikasi dan tools SA-MP. Pastikan membaca detail dan petunjuk pemasangan dari pembuat mod sebelum menggunakannya.</p>
+            <p class="disclaimer">RuangMod adalah proyek komunitas dan tidak berafiliasi dengan pemilik atau penerbit game. Hormati hak cipta serta aturan server yang kamu ikuti.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand" href="#"><span class="brand-mark" aria-hidden="true">R</span><span>ruang<span class="brand-accent">mod</span></span></a>
+      <span>BUATAN KOMUNITAS · 2026</span>
+      <a href="#koleksi">Kembali ke atas ↑</a>
+    </footer>
+
+    <dialog id="mod-dialog" class="mod-dialog" aria-labelledby="dialog-title">
+      <button class="dialog-close" type="button" aria-label="Tutup">×</button>
+      <p id="dialog-category" class="eyebrow"></p>
+      <h2 id="dialog-title"></h2>
+      <p id="dialog-description" class="dialog-description"></p>
+      <div class="dialog-meta"><span id="dialog-version"></span><span id="dialog-size"></span></div>
+      <a id="dialog-download" class="primary-button dialog-download" href="#">Unduh mod <span aria-hidden="true">↓</span></a>
+      <p id="dialog-unavailable" class="download-note" hidden>Tautan unduhan belum ditambahkan oleh pengelola.</p>
+    </dialog>
+  </body>
+</html>
