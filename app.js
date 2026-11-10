@@ -178,7 +178,7 @@ function renderMods() {
       ? `<button class="download-button" type="button" data-download-id="${escapeHtml(mod.fileId)}">Unduh ↓</button>`
       : mod.downloadUrl
         ? `<a class="download-button" href="${escapeHtml(mod.downloadUrl)}" download>Unduh ↓</a>`
-        : '<button class="download-button" type="button" disabled>Belum tersedia</button>';
+        : `<button class="download-button" type="button" data-details="${escapeHtml(mod.id)}">Buka ↗</button>`;
     return `
       <article class="mod-card">
         <div class="card-art" style="--card-bg:${background};--card-color:${color}">
