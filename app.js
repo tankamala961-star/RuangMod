@@ -71,10 +71,6 @@ const initialMods = [
   }
 ];
 
-const allowedExtensions = new Set([
-  "zip", "rar", "7z", "asi", "cs", "lua", "ini", "cfg", "txd", "dff",
-  "png", "jpg", "jpeg", "bmp"
-]);
 const archiveSignatures = {
   zip: [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06], [0x50, 0x4b, 0x07, 0x08]],
   rar: [[0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00], [0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00]],
@@ -106,14 +102,16 @@ const emptyStateDescription = document.querySelector("#empty-state-description")
 const createFirstModButton = document.querySelector("#create-first-mod");
 const dialog = document.querySelector("#mod-dialog");
 const uploadForm = document.querySelector("#upload-form");
-const fileInput = document.querySelector("#upload-file");
+const folderInput = document.querySelector("#upload-folder");
+const chooseFolderButton = document.querySelector("#choose-folder-button");
+const folderSelection = document.querySelector("#folder-selection");
 const analysisPanel = document.querySelector("#analysis-result");
 const analyzeButton = document.querySelector("#analyze-button");
 const publishButton = document.querySelector("#publish-button");
 const uploadStatus = document.querySelector("#upload-status");
 let mods = [...initialMods];
 let activeCategory = "Semua";
-let analyzedFile = null;
+let analyzedFolder = null;
 let storageReady = false;
 let database;
 
@@ -260,11 +258,6 @@ function matchesSignature(bytes, signatures) {
 
 async function analyzeFile(file) {
   const extension = file.name.split(".").pop().toLowerCase();
-  if (file.type.startsWith("video/") || !allowedExtensions.has(extension)) {
-    throw new Error("Jenis berkas tidak didukung. Video dan format selain daftar yang diizinkan tidak dapat diunggah.");
-  }
-  if (file.size === 0) throw new Error("Berkas kosong tidak dapat dianalisis.");
-  if (file.size > 100 * 1024 * 1024) throw new Error("Ukuran berkas melebihi batas 100 MB.");
 
   if (archiveSignatures[extension]) {
     const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
@@ -286,13 +279,71 @@ async function analyzeFile(file) {
   return { extension, sha256 };
 }
 
-function showAnalysis(file, result) {
+function getRelativePath(file) {
+  const rawPath = (file.webkitRelativePath || file.name).replace(/\\/g, "/");
+  if (rawPath.startsWith("/") || /^[a-z]:/i.test(rawPath)) {
+    throw new Error("Folder berisi jalur file yang tidak valid.");
+  }
+  const parts = rawPath.split("/");
+  if (parts.some((part) => !part || part === "." || part === ".." || part.includes(":"))) {
+    throw new Error("Folder berisi nama file atau jalur yang tidak valid.");
+  }
+  const relativeParts = parts.length > 1 ? parts.slice(1) : parts;
+  if (!relativeParts.length) {
+    throw new Error("Folder berisi nama file atau jalur yang tidak valid.");
+  }
+  return { root: parts[0], path: relativeParts.join("/") };
+}
+
+async function analyzeFolder(fileList) {
+  const files = Array.from(fileList);
+  if (files.length === 0) throw new Error("Pilih folder yang berisi file mod terlebih dahulu.");
+  if (!crypto.subtle) throw new Error("Browser ini tidak mendukung analisis SHA-256. Buka situs melalui koneksi aman (HTTPS).");
+
+  const seenPaths = new Set();
+  const analyzedFiles = [];
+  let totalSize = 0;
+  let folderName = "";
+  const fingerprintParts = [];
+
+  for (const file of files) {
+    if (file.type.startsWith("video/") || /\.(?:3g2|3gp|avi|m4v|mkv|mov|mp4|mpeg|mpg|ogv|webm|wmv)$/i.test(file.name)) {
+      throw new Error(`Folder berisi video yang tidak dapat diunggah: ${file.name}`);
+    }
+
+    const relativePath = getRelativePath(file);
+    if (folderName && folderName !== relativePath.root) {
+      throw new Error("Pilih satu folder mod saja dalam satu kali unggahan.");
+    }
+    folderName = relativePath.root;
+    const path = relativePath.path;
+    if (seenPaths.has(path)) throw new Error(`Folder berisi jalur file duplikat: ${path}`);
+    seenPaths.add(path);
+
+    const result = await analyzeFile(file);
+    analyzedFiles.push({ path, file, sha256: result.sha256 });
+    totalSize += file.size;
+    fingerprintParts.push(`${path}\0${result.sha256}\0`);
+  }
+
+  const folderDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprintParts.sort().join("")));
+  const sha256 = Array.from(new Uint8Array(folderDigest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return {
+    files: analyzedFiles,
+    count: analyzedFiles.length,
+    totalSize,
+    sha256,
+    folderName
+  };
+}
+
+function showAnalysis(folder) {
   analysisPanel.classList.remove("analysis-error");
   analysisPanel.innerHTML = `
-    <strong>Analisis berkas berhasil</strong>
-    <span>Nama: ${escapeHtml(file.name)} · Format: .${escapeHtml(result.extension)} · Ukuran: ${formatSize(file.size)}</span>
-    <span>SHA-256: <code>${result.sha256}</code></span>
-    <span class="analysis-warning">Pemeriksaan ini hanya memvalidasi format dan sidik jari, bukan memindai malware atau isi arsip. Mod bisa menjalankan kode; jangan pasang berkas yang tidak dipercaya.</span>
+    <strong>Analisis folder berhasil</strong>
+    <span>Folder: ${escapeHtml(folder.folderName)} · ${folder.count} file · ${formatSize(folder.totalSize)}</span>
+    <span>SHA-256 folder: <code>${folder.sha256}</code></span>
+    <span class="analysis-warning">Pemeriksaan ini hanya memvalidasi beberapa signature dan sidik jari, bukan memindai malware. Mod bisa menjalankan kode; jangan pasang folder yang tidak dipercaya.</span>
   `;
   analysisPanel.hidden = false;
 }
@@ -314,11 +365,120 @@ function createDownload(file, filename) {
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+const crc32Table = Uint32Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  return value >>> 0;
+});
+
+async function calculateCrc32(file) {
+  const reader = file.stream().getReader();
+  let crc = 0xffffffff;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    for (const byte of value) crc = crc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function createZipHeader(signature, byteLength) {
+  const header = new Uint8Array(byteLength);
+  new DataView(header.buffer).setUint32(0, signature, true);
+  return header;
+}
+
+async function createZip(files) {
+  if (files.length > 0xffff) throw new Error("Folder berisi terlalu banyak file untuk format ZIP standar.");
+  if (typeof CompressionStream === "undefined") throw new Error("Browser ini tidak mendukung pembuatan ZIP. Coba browser versi terbaru.");
+
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let localOffset = 0;
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+
+  for (const entry of files) {
+    if (entry.file.size > 0xffffffff || localOffset > 0xffffffff) {
+      throw new Error("Folder terlalu besar untuk format ZIP standar di browser ini.");
+    }
+    const filename = encoder.encode(entry.path);
+    if (filename.length > 0xffff) throw new Error(`Nama file terlalu panjang untuk ZIP: ${entry.path}`);
+    const crc = await calculateCrc32(entry.file);
+    const compressedReader = entry.file.stream().pipeThrough(new CompressionStream("deflate-raw")).getReader();
+    const compressedChunks = [];
+    let compressedSize = 0;
+    while (true) {
+      const { done, value } = await compressedReader.read();
+      if (done) break;
+      compressedSize += value.length;
+      if (compressedSize > 0xffffffff) throw new Error("File terlalu besar untuk format ZIP standar di browser ini.");
+      compressedChunks.push(value);
+    }
+
+    const localHeader = createZipHeader(0x04034b50, 30 + filename.length);
+    const localView = new DataView(localHeader.buffer);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0x0800, true);
+    localView.setUint16(8, 8, true);
+    localView.setUint16(10, dosTime, true);
+    localView.setUint16(12, dosDate, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, compressedSize, true);
+    localView.setUint32(22, entry.file.size, true);
+    localView.setUint16(26, filename.length, true);
+    localHeader.set(filename, 30);
+    localParts.push(localHeader, ...compressedChunks);
+
+    const centralHeader = createZipHeader(0x02014b50, 46 + filename.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0x0800, true);
+    centralView.setUint16(10, 8, true);
+    centralView.setUint16(12, dosTime, true);
+    centralView.setUint16(14, dosDate, true);
+    centralView.setUint32(16, crc, true);
+    centralView.setUint32(20, compressedSize, true);
+    centralView.setUint32(24, entry.file.size, true);
+    centralView.setUint16(28, filename.length, true);
+    centralView.setUint32(42, localOffset, true);
+    centralHeader.set(filename, 46);
+    centralParts.push(centralHeader);
+    localOffset += localHeader.length + compressedSize;
+    if (localOffset > 0xffffffff) throw new Error("Folder terlalu besar untuk format ZIP standar di browser ini.");
+  }
+
+  const centralDirectory = new Blob(centralParts);
+  const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+  if (centralSize > 0xffffffff) throw new Error("Daftar isi folder terlalu besar untuk format ZIP standar.");
+  const endRecord = createZipHeader(0x06054b50, 22);
+  const endView = new DataView(endRecord.buffer);
+  endView.setUint16(8, files.length, true);
+  endView.setUint16(10, files.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, localOffset, true);
+  return new Blob([...localParts, centralDirectory, endRecord], { type: "application/zip" });
+}
+
+function sanitizeFilename(name) {
+  return name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "").trim() || "mod";
+}
+
 async function downloadUploadedMod(id) {
   try {
     const mod = await getUploadedMod(id);
-    if (!mod || !mod.file) throw new Error("Berkas mod tidak ditemukan di penyimpanan browser ini.");
-    createDownload(mod.file, mod.file.name);
+    if (!mod) throw new Error("Mod tidak ditemukan di penyimpanan browser ini.");
+    if (Array.isArray(mod.files)) {
+      const zip = await createZip(mod.files);
+      createDownload(zip, `${sanitizeFilename(mod.name)}.zip`);
+    } else if (mod.file) {
+      createDownload(mod.file, mod.file.name);
+    } else {
+      throw new Error("File mod tidak ditemukan di penyimpanan browser ini.");
+    }
   } catch (error) {
     uploadStatus.textContent = `Unduhan gagal: ${error.message}`;
   }
@@ -365,45 +525,55 @@ dialog.addEventListener("click", (event) => {
   if (event.target === dialog) dialog.close();
 });
 
-fileInput.addEventListener("change", () => {
-  analyzedFile = null;
+folderInput.addEventListener("change", () => {
+  analyzedFolder = null;
   publishButton.disabled = true;
   analysisPanel.hidden = true;
   uploadStatus.textContent = "";
+  const files = Array.from(folderInput.files);
+  const folderName = files.length
+    ? (files[0].webkitRelativePath || files[0].name).replace(/\\/g, "/").split("/")[0]
+    : "";
+  folderSelection.textContent = files.length
+    ? `${folderName} · ${files.length} file`
+    : "Belum ada folder yang dipilih.";
 });
 
+chooseFolderButton.addEventListener("click", () => folderInput.click());
+
 analyzeButton.addEventListener("click", async () => {
-  const file = fileInput.files[0];
-  analyzedFile = null;
+  const files = Array.from(folderInput.files);
+  analyzedFolder = null;
   publishButton.disabled = true;
-  if (!file) {
-    showAnalysisError("Pilih berkas mod terlebih dahulu.");
+  if (!files.length) {
+    showAnalysisError("Pilih folder mod terlebih dahulu.");
     return;
   }
 
   analyzeButton.disabled = true;
-  analyzeButton.textContent = "Menganalisis...";
+  analyzeButton.textContent = "Menganalisis folder...";
   try {
-    const result = await analyzeFile(file);
+    const result = await analyzeFolder(files);
     const duplicate = mods.some((mod) => mod.sha256 === result.sha256);
-    if (duplicate) throw new Error("Berkas dengan sidik jari yang sama sudah ada di katalog browser ini.");
-    analyzedFile = { file, ...result };
-    showAnalysis(file, result);
+    if (duplicate) throw new Error("Folder dengan isi yang sama sudah ada di katalog browser ini.");
+    analyzedFolder = result;
+    showAnalysis(result);
     publishButton.disabled = !storageReady;
     if (!storageReady) uploadStatus.textContent = "Penyimpanan browser tidak tersedia; mod belum bisa ditambahkan.";
   } catch (error) {
     showAnalysisError(error.message);
   } finally {
     analyzeButton.disabled = false;
-    analyzeButton.textContent = "Analisis berkas";
+    analyzeButton.textContent = "Analisis folder";
   }
 });
 
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const file = fileInput.files[0];
-  if (!storageReady || !analyzedFile || analyzedFile.file !== file) {
-    uploadStatus.textContent = "Pilih dan analisis berkas sebelum menambahkannya.";
+  const selectedFiles = Array.from(folderInput.files);
+  if (!storageReady || !analyzedFolder || analyzedFolder.files.length !== selectedFiles.length
+      || analyzedFolder.files.some((entry, index) => entry.file !== selectedFiles[index])) {
+    uploadStatus.textContent = "Pilih dan analisis folder sebelum menambahkannya.";
     publishButton.disabled = true;
     return;
   }
@@ -421,12 +591,12 @@ uploadForm.addEventListener("submit", async (event) => {
     category,
     description: formData.get("description").trim(),
     version: formData.get("version").trim(),
-    size: formatSize(file.size),
+    size: formatSize(analyzedFolder.totalSize),
     symbol,
     background,
     color,
-    sha256: analyzedFile.sha256,
-    file
+    sha256: analyzedFolder.sha256,
+    files: analyzedFolder.files.map(({ path, file }) => ({ path, file }))
   };
   mod.fileId = mod.id;
 
@@ -436,7 +606,8 @@ uploadForm.addEventListener("submit", async (event) => {
     renderFilters();
     renderMods();
     uploadForm.reset();
-    analyzedFile = null;
+    analyzedFolder = null;
+    folderSelection.textContent = "Belum ada folder yang dipilih.";
     analysisPanel.hidden = true;
     uploadStatus.textContent = "Mod berhasil ditambahkan ke katalog lokal. Mod ini hanya terlihat di browser dan perangkat ini.";
   } catch (error) {

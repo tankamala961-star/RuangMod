@@ -116,14 +116,16 @@
               <textarea name="description" rows="4" maxlength="500" required placeholder="Jelaskan isi mod, kompatibilitas, dan cara memasangnya."></textarea>
             </label>
             <label class="form-field form-field-wide">
-              <span>Berkas mod (bukan video)</span>
-              <input id="upload-file" name="file" type="file" required accept=".zip,.rar,.7z,.asi,.cs,.lua,.ini,.cfg,.txd,.dff,.png,.jpg,.jpeg,.bmp">
-              <small>ZIP, RAR, 7Z, ASI, CS, LUA, INI, CFG, TXD, DFF, PNG, JPG, atau BMP · Maks. 100 MB. Berkas mod dapat menjalankan kode di game; unggah hanya karya yang kamu percaya.</small>
+              <span>Folder mod (bukan video)</span>
+              <button id="choose-folder-button" class="secondary-button folder-picker-trigger" type="button">Pilih folder mod</button>
+              <input id="upload-folder" class="folder-picker-input" name="folder" type="file" webkitdirectory directory multiple tabindex="-1" aria-hidden="true">
+              <span id="folder-selection" class="folder-selection" aria-live="polite">Belum ada folder yang dipilih.</span>
+              <small>Pilih folder mod yang sudah diekstrak. Semua file dan subfolder akan disimpan sebagai satu mod dan dikemas menjadi ZIP saat diunduh. Tidak ada batas jumlah mod; kapasitas penyimpanan browser/perangkat tetap berlaku. Folder berisi video tidak diterima.</small>
             </label>
           </div>
           <div class="analysis-panel" id="analysis-result" aria-live="polite" hidden></div>
           <div class="upload-actions">
-            <button class="secondary-button" id="analyze-button" type="button">Analisis berkas</button>
+            <button class="secondary-button" id="analyze-button" type="button">Analisis folder</button>
             <button class="primary-button" id="publish-button" type="submit" disabled>Tambahkan ke katalog <span aria-hidden="true">↑</span></button>
           </div>
           <p id="upload-status" class="upload-status" role="status" aria-live="polite"></p>

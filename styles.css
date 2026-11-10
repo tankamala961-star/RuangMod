@@ -117,8 +117,9 @@ kbd { padding: 2px 6px; border: 1px solid var(--line); border-radius: 3px; color
 .form-field input:focus, .form-field select:focus, .form-field textarea:focus { border-color: var(--accent); }
 .form-field input::placeholder, .form-field textarea::placeholder { color: #777a71; }
 .form-field textarea { resize: vertical; line-height: 1.6; }
-.form-field input[type="file"] { padding: 9px; }
-.form-field input[type="file"]::file-selector-button { margin-right: 12px; padding: 7px 10px; border: 1px solid #484b42; border-radius: 3px; background: #20231e; color: var(--text); cursor: pointer; }
+.folder-picker-trigger { justify-self: start; }
+.folder-picker-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.folder-selection { color: var(--muted); font-size: 11px; }
 .form-field small { color: var(--muted); font-size: 10px; line-height: 1.6; }
 .form-field-wide { grid-column: 1 / -1; }
 .analysis-panel { display: grid; gap: 8px; margin-top: 20px; padding: 15px; border: 1px solid #454c35; border-radius: 4px; background: #c9f36a0b; color: #d7d9d0; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
