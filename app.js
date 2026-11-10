@@ -185,7 +185,7 @@ function renderMods() {
     return matchesCategory && searchableText.includes(query);
   });
 
-  grid.innerHTML = visibleMods.map((mod, index) => {
+  grid.innerHTML = visibleMods.map((mod) => {
     const [background, color, symbol] = palettes[mod.category] || palettes.Lainnya;
     const downloadAction = mod.fileId
       ? `<button class="download-button" type="button" data-download-id="${escapeHtml(mod.fileId)}">Unduh ↓</button>`
@@ -196,10 +196,9 @@ function renderMods() {
       <article class="mod-card">
         <div class="card-art" style="--card-bg:${background};--card-color:${color}">
           <span class="card-symbol" aria-hidden="true">${escapeHtml(mod.symbol || symbol)}</span>
-          <span class="card-number">${String(index + 1).padStart(2, "0")} / ${String(visibleMods.length).padStart(2, "0")}</span>
         </div>
         <div class="card-body">
-          <div class="card-topline"><span class="category-tag">${escapeHtml(mod.category)}</span><span class="file-size">${escapeHtml(mod.size)}</span></div>
+          <div class="card-topline"><span class="category-tag">${escapeHtml(mod.category)}</span></div>
           <h3>${escapeHtml(mod.name)}</h3>
           <p>${escapeHtml(mod.description)}</p>
           ${mod.author ? `<p class="card-author">Dibagikan oleh ${escapeHtml(mod.author)}</p>` : ""}
@@ -212,7 +211,7 @@ function renderMods() {
     `;
   }).join("");
 
-  resultsCount.textContent = `${String(visibleMods.length).padStart(2, "0")} MOD DITEMUKAN`;
+  resultsCount.textContent = `${visibleMods.length} MOD DITEMUKAN`;
   emptyState.hidden = visibleMods.length > 0;
   grid.hidden = visibleMods.length === 0;
   const isEmptyArchive = visibleMods.length === 0 && !query && activeCategory !== "Semua";
