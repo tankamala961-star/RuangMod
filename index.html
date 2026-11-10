@@ -38,7 +38,7 @@
           <div class="art-ring ring-one"></div>
           <div class="art-ring ring-two"></div>
           <div class="art-cross">✳</div>
-          <div class="art-label">COMMUNITY<br>MODS / 2026</div>
+          <div class="art-label">RuangMod<br>EST. 2026</div>
           <div class="art-index">01 — 04</div>
         </div>
         <div class="hero-foot"><span>UNTUK KOMUNITAS SA-MP</span><span>BUATAN KOMUNITAS, UNTUK KOMUNITAS</span></div>
@@ -114,6 +114,7 @@
             <label class="form-field form-field-wide">
               <span>Deskripsi dan petunjuk pemasangan</span>
               <textarea name="description" rows="4" maxlength="500" required placeholder="Jelaskan isi mod, kompatibilitas, dan cara memasangnya."></textarea>
+              <small>Teks ditampilkan sebagai teks biasa. Tautan tidak bisa diklik—jangan ikuti tautan atau instruksi dari sumber yang tidak dikenal.</small>
             </label>
             <label class="form-field form-field-wide">
               <span>Folder mod (bukan video)</span>
@@ -121,6 +122,16 @@
               <input id="upload-folder" class="folder-picker-input" name="folder" type="file" webkitdirectory directory multiple tabindex="-1" aria-hidden="true">
               <span id="folder-selection" class="folder-selection" aria-live="polite">Belum ada folder yang dipilih.</span>
               <small>Pilih folder mod yang sudah diekstrak. Semua file dan subfolder akan disimpan sebagai satu mod dan dikemas menjadi ZIP saat diunduh. Tidak ada batas jumlah mod; kapasitas penyimpanan browser/perangkat tetap berlaku. Folder berisi video tidak diterima.</small>
+            </label>
+            <label id="code-acknowledgement" class="security-ack form-field-wide" hidden>
+              <input id="trusted-code" type="checkbox">
+              <span>Folder berisi komponen mod yang dapat menjalankan kode (ASI, DLL, CS, atau LUA). Saya percaya sumbernya dan memahami risikonya.</span>
+            </label>
+            <label class="form-field form-field-wide">
+              <span>Preview mod (opsional)</span>
+              <input id="upload-preview" name="preview" type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp">
+              <small>Pilih gambar PNG, JPG, atau WEBP untuk ditampilkan di kartu mod. Boleh dikosongkan.</small>
+              <img id="preview-thumbnail" class="preview-thumbnail" alt="Pratinjau gambar mod" hidden>
             </label>
           </div>
           <div class="analysis-panel" id="analysis-result" aria-live="polite" hidden></div>
@@ -153,11 +164,16 @@
     <dialog id="mod-dialog" class="mod-dialog" aria-labelledby="dialog-title">
       <button class="dialog-close" type="button" aria-label="Tutup">×</button>
       <p id="dialog-category" class="eyebrow"></p>
+      <img id="dialog-preview" class="dialog-preview" alt="" hidden>
       <h2 id="dialog-title"></h2>
       <p id="dialog-description" class="dialog-description"></p>
-      <div class="dialog-meta"><span id="dialog-version"></span><span id="dialog-size"></span></div>
+      <div class="dialog-meta">
+        <span id="dialog-version"></span>
+        <span id="dialog-author" hidden></span>
+      </div>
+      <p id="dialog-download-note" class="download-note" hidden>Folder mod akan diunduh sebagai file ZIP setelah tombol di bawah ditekan.</p>
+      <p id="dialog-unavailable" class="download-note" hidden>Tautan unduhan belum tersedia atau tidak aman.</p>
       <a id="dialog-download" class="primary-button dialog-download" href="#">Unduh mod <span aria-hidden="true">↓</span></a>
-      <p id="dialog-unavailable" class="download-note" hidden>Tautan unduhan belum ditambahkan oleh pengelola.</p>
     </dialog>
   </body>
 </html>

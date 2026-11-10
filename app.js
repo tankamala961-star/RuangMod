@@ -82,6 +82,13 @@ const fileSignatures = {
   jpeg: [[0xff, 0xd8, 0xff]],
   bmp: [[0x42, 0x4d]]
 };
+const blockedFileExtensions = new Set([
+  "exe", "msi", "msp", "com", "scr", "bat", "cmd", "ps1", "vbs", "vbe",
+  "jse", "wsf", "wsh", "hta", "js", "mjs", "cjs", "html", "htm", "xhtml",
+  "svg", "url", "lnk", "website", "webloc", "reg", "sh", "bash", "zsh",
+  "jar", "appx", "msix", "zip", "rar", "7z"
+]);
+const codeExtensions = new Set(["asi", "dll", "cs", "lua", "cleo"]);
 const palettes = {
   Visual: ["#2b3123", "#d0f66d", "V"],
   UI: ["#252d32", "#a9d9e5", "⌗"],
@@ -103,8 +110,12 @@ const createFirstModButton = document.querySelector("#create-first-mod");
 const dialog = document.querySelector("#mod-dialog");
 const uploadForm = document.querySelector("#upload-form");
 const folderInput = document.querySelector("#upload-folder");
+const previewInput = document.querySelector("#upload-preview");
 const chooseFolderButton = document.querySelector("#choose-folder-button");
 const folderSelection = document.querySelector("#folder-selection");
+const previewThumbnail = document.querySelector("#preview-thumbnail");
+const codeAcknowledgement = document.querySelector("#code-acknowledgement");
+const trustedCodeInput = document.querySelector("#trusted-code");
 const analysisPanel = document.querySelector("#analysis-result");
 const analyzeButton = document.querySelector("#analyze-button");
 const publishButton = document.querySelector("#publish-button");
@@ -112,8 +123,10 @@ const uploadStatus = document.querySelector("#upload-status");
 let mods = [...initialMods];
 let activeCategory = "Semua";
 let analyzedFolder = null;
+let previewSelectionUrl = "";
 let storageReady = false;
 let database;
+const previewUrls = new Map();
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -162,6 +175,13 @@ function escapeHtml(value) {
   })[character]);
 }
 
+function sanitizeUserText(value) {
+  return String(value)
+    .normalize("NFC")
+    .replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, "")
+    .trim();
+}
+
 function formatSize(bytes) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -177,6 +197,16 @@ function renderFilters() {
   `).join("");
 }
 
+function getPreviewUrl(mod) {
+  if (!mod.preview) return "";
+  const cached = previewUrls.get(mod.id);
+  if (cached && cached.file === mod.preview) return cached.url;
+  if (cached) URL.revokeObjectURL(cached.url);
+  const url = URL.createObjectURL(mod.preview);
+  previewUrls.set(mod.id, { file: mod.preview, url });
+  return url;
+}
+
 function renderMods() {
   const query = searchInput.value.trim().toLocaleLowerCase("id");
   const visibleMods = mods.filter((mod) => {
@@ -187,24 +217,24 @@ function renderMods() {
 
   grid.innerHTML = visibleMods.map((mod) => {
     const [background, color, symbol] = palettes[mod.category] || palettes.Lainnya;
-    const downloadAction = mod.fileId
-      ? `<button class="download-button" type="button" data-download-id="${escapeHtml(mod.fileId)}">Unduh ↓</button>`
-      : mod.downloadUrl
-        ? `<a class="download-button" href="${escapeHtml(mod.downloadUrl)}" download>Unduh ↓</a>`
-        : "";
+    const openLabel = mod.fileId ? "Buka folder ↗" : "Buka ↗";
     return `
-      <article class="mod-card">
+      <article class="mod-card${mod.fileId ? " mod-card-folder" : ""}">
         <div class="card-art" style="--card-bg:${background};--card-color:${color}">
-          <span class="card-symbol" aria-hidden="true">${escapeHtml(mod.symbol || symbol)}</span>
+          ${mod.preview
+            ? `<img class="card-preview" src="${getPreviewUrl(mod)}" alt="Preview ${escapeHtml(mod.name)}" loading="lazy">`
+            : `<span class="card-symbol" aria-hidden="true">${escapeHtml(mod.symbol || symbol)}</span>`}
         </div>
         <div class="card-body">
-          <div class="card-topline"><span class="category-tag">${escapeHtml(mod.category)}</span></div>
+          <div class="card-topline">
+            <span class="category-tag">${escapeHtml(mod.category)}</span>
+            ${mod.fileId ? '<span class="folder-tag">▰ FOLDER MOD</span>' : ""}
+          </div>
           <h3>${escapeHtml(mod.name)}</h3>
           <p>${escapeHtml(mod.description)}</p>
           ${mod.author ? `<p class="card-author">Dibagikan oleh ${escapeHtml(mod.author)}</p>` : ""}
           <div class="card-actions">
-            <button class="details-button" type="button" data-details="${escapeHtml(mod.id)}">Buka ↗</button>
-            ${downloadAction}
+            <button class="details-button" type="button" data-details="${escapeHtml(mod.id)}">${openLabel}</button>
           </div>
         </div>
       </article>
@@ -229,19 +259,33 @@ function showDetails(mod) {
   document.querySelector("#dialog-category").textContent = mod.category.toUpperCase();
   document.querySelector("#dialog-title").textContent = mod.name;
   document.querySelector("#dialog-description").textContent = mod.description;
-  document.querySelector("#dialog-version").textContent = mod.version;
-  document.querySelector("#dialog-size").textContent = `${mod.size}${mod.author ? ` · oleh ${mod.author}` : ""}`;
+  document.querySelector("#dialog-version").textContent = `Versi: ${mod.version}`;
+  const author = document.querySelector("#dialog-author");
+  author.hidden = !mod.author;
+  author.textContent = mod.author ? `Pembuat: ${mod.author}` : "";
+  const preview = document.querySelector("#dialog-preview");
+  preview.hidden = !mod.preview;
+  if (mod.preview) {
+    preview.src = getPreviewUrl(mod);
+    preview.alt = `Preview ${mod.name}`;
+  } else {
+    preview.removeAttribute("src");
+    preview.alt = "";
+  }
 
   const downloadLink = document.querySelector("#dialog-download");
+  const downloadNote = document.querySelector("#dialog-download-note");
   const unavailableNote = document.querySelector("#dialog-unavailable");
-  downloadLink.hidden = !mod.downloadUrl && !mod.fileId;
-  unavailableNote.hidden = Boolean(mod.downloadUrl || mod.fileId);
+  const safeDownloadUrl = getSafeDownloadUrl(mod.downloadUrl);
+  downloadLink.hidden = !safeDownloadUrl && !mod.fileId;
+  unavailableNote.hidden = Boolean(safeDownloadUrl || mod.fileId);
+  downloadNote.hidden = !mod.fileId;
   if (mod.fileId) {
     downloadLink.href = "#";
     downloadLink.dataset.downloadId = mod.fileId;
     downloadLink.removeAttribute("download");
-  } else if (mod.downloadUrl) {
-    downloadLink.href = mod.downloadUrl;
+  } else if (safeDownloadUrl) {
+    downloadLink.href = safeDownloadUrl;
     downloadLink.download = "";
     delete downloadLink.dataset.downloadId;
   } else {
@@ -249,6 +293,19 @@ function showDetails(mod) {
     delete downloadLink.dataset.downloadId;
   }
   dialog.showModal();
+}
+
+function getSafeDownloadUrl(value) {
+  if (typeof value !== "string" || !value.trim() || value.startsWith("//")) return "";
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return "";
+  try {
+    const url = new URL(value, location.href);
+    if (url.username || url.password || url.origin !== location.origin) return "";
+    if (url.protocol !== location.protocol || !["http:", "https:", "file:"].includes(url.protocol)) return "";
+    return url.href;
+  } catch {
+    return "";
+  }
 }
 
 function matchesSignature(bytes, signatures) {
@@ -278,13 +335,37 @@ async function analyzeFile(file) {
   return { extension, sha256 };
 }
 
+async function validatePreview(file) {
+  if (!file) return;
+  const extension = file.name.split(".").pop().toLowerCase();
+  const signature = fileSignatures[extension];
+  if (!["png", "jpg", "jpeg", "webp"].includes(extension) || file.type.startsWith("video/")) {
+    throw new Error("Preview harus berupa gambar PNG, JPG, atau WEBP.");
+  }
+
+  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const validSignature = extension === "webp"
+    ? matchesSignature(header, [[0x52, 0x49, 0x46, 0x46]])
+      && header[8] === 0x57 && header[9] === 0x45 && header[10] === 0x42 && header[11] === 0x50
+    : signature && matchesSignature(header, signature);
+  if (!validSignature) throw new Error("Isi gambar preview tidak cocok dengan format nama filenya.");
+
+  if (typeof createImageBitmap !== "function") {
+    throw new Error("Browser ini tidak mendukung pemeriksaan gambar preview. Coba browser versi terbaru.");
+  }
+  const bitmap = await createImageBitmap(file);
+  bitmap.close();
+}
+
 function getRelativePath(file) {
   const rawPath = (file.webkitRelativePath || file.name).replace(/\\/g, "/");
   if (rawPath.startsWith("/") || /^[a-z]:/i.test(rawPath)) {
     throw new Error("Folder berisi jalur file yang tidak valid.");
   }
   const parts = rawPath.split("/");
-  if (parts.some((part) => !part || part === "." || part === ".." || part.includes(":"))) {
+  if (parts.some((part) => !part || part === "." || part === ".."
+      || /[<>:"|?*\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(part) || /[. ]$/.test(part)
+      || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) {
     throw new Error("Folder berisi nama file atau jalur yang tidak valid.");
   }
   const relativeParts = parts.length > 1 ? parts.slice(1) : parts;
@@ -294,13 +375,15 @@ function getRelativePath(file) {
   return { root: parts[0], path: relativeParts.join("/") };
 }
 
-async function analyzeFolder(fileList) {
+async function analyzeFolder(fileList, previewFile) {
   const files = Array.from(fileList);
   if (files.length === 0) throw new Error("Pilih folder yang berisi file mod terlebih dahulu.");
   if (!crypto.subtle) throw new Error("Browser ini tidak mendukung analisis SHA-256. Buka situs melalui koneksi aman (HTTPS).");
+  await validatePreview(previewFile);
 
   const seenPaths = new Set();
   const analyzedFiles = [];
+  const riskyFiles = [];
   let totalSize = 0;
   let folderName = "";
   const fingerprintParts = [];
@@ -309,6 +392,10 @@ async function analyzeFolder(fileList) {
     if (file.type.startsWith("video/") || /\.(?:3g2|3gp|avi|m4v|mkv|mov|mp4|mpeg|mpg|ogv|webm|wmv)$/i.test(file.name)) {
       throw new Error(`Folder berisi video yang tidak dapat diunggah: ${file.name}`);
     }
+    const extension = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "";
+    if (blockedFileExtensions.has(extension)) {
+      throw new Error(`Folder berisi file yang diblokir demi keamanan (.${extension}). Hapus file tersebut dan ekstrak arsip mod sebelum mengunggah.`);
+    }
 
     const relativePath = getRelativePath(file);
     if (folderName && folderName !== relativePath.root) {
@@ -316,11 +403,13 @@ async function analyzeFolder(fileList) {
     }
     folderName = relativePath.root;
     const path = relativePath.path;
-    if (seenPaths.has(path)) throw new Error(`Folder berisi jalur file duplikat: ${path}`);
-    seenPaths.add(path);
+    const normalizedPath = path.toLocaleLowerCase("en-US");
+    if (seenPaths.has(normalizedPath)) throw new Error(`Folder berisi jalur file duplikat: ${path}`);
+    seenPaths.add(normalizedPath);
 
     const result = await analyzeFile(file);
     analyzedFiles.push({ path, file, sha256: result.sha256 });
+    if (codeExtensions.has(extension)) riskyFiles.push(path);
     totalSize += file.size;
     fingerprintParts.push(`${path}\0${result.sha256}\0`);
   }
@@ -329,10 +418,12 @@ async function analyzeFolder(fileList) {
   const sha256 = Array.from(new Uint8Array(folderDigest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   return {
     files: analyzedFiles,
+    riskyFiles,
     count: analyzedFiles.length,
     totalSize,
     sha256,
-    folderName
+    folderName,
+    previewFile
   };
 }
 
@@ -342,9 +433,15 @@ function showAnalysis(folder) {
     <strong>Analisis folder berhasil</strong>
     <span>Folder: ${escapeHtml(folder.folderName)} · ${folder.count} file · ${formatSize(folder.totalSize)}</span>
     <span>SHA-256 folder: <code>${folder.sha256}</code></span>
-    <span class="analysis-warning">Pemeriksaan ini hanya memvalidasi beberapa signature dan sidik jari, bukan memindai malware. Mod bisa menjalankan kode; jangan pasang folder yang tidak dipercaya.</span>
+    ${folder.riskyFiles.length
+      ? `<span class="analysis-warning">Ditemukan komponen yang dapat menjalankan kode: ${folder.riskyFiles.map(escapeHtml).join(", ")}. Verifikasi sumbernya sebelum berbagi.</span>`
+      : ""}
+    <span class="analysis-warning">Pemeriksaan browser bukan antivirus. Jangan jalankan mod atau ikuti tautan dari sumber yang tidak dipercaya.</span>
   `;
   analysisPanel.hidden = false;
+  trustedCodeInput.checked = false;
+  codeAcknowledgement.hidden = folder.riskyFiles.length === 0;
+  publishButton.disabled = !storageReady || folder.riskyFiles.length > 0;
 }
 
 function showAnalysisError(message) {
@@ -528,6 +625,8 @@ folderInput.addEventListener("change", () => {
   analyzedFolder = null;
   publishButton.disabled = true;
   analysisPanel.hidden = true;
+  codeAcknowledgement.hidden = true;
+  trustedCodeInput.checked = false;
   uploadStatus.textContent = "";
   const files = Array.from(folderInput.files);
   const folderName = files.length
@@ -536,6 +635,35 @@ folderInput.addEventListener("change", () => {
   folderSelection.textContent = files.length
     ? `${folderName} · ${files.length} file`
     : "Belum ada folder yang dipilih.";
+});
+
+previewInput.addEventListener("change", async () => {
+  analyzedFolder = null;
+  publishButton.disabled = true;
+  analysisPanel.hidden = true;
+  codeAcknowledgement.hidden = true;
+  trustedCodeInput.checked = false;
+  const file = previewInput.files[0];
+  if (previewSelectionUrl) URL.revokeObjectURL(previewSelectionUrl);
+  previewSelectionUrl = "";
+  previewThumbnail.hidden = true;
+  previewThumbnail.removeAttribute("src");
+  if (!file) return;
+
+  try {
+    await validatePreview(file);
+    previewSelectionUrl = URL.createObjectURL(file);
+    previewThumbnail.src = previewSelectionUrl;
+    previewThumbnail.hidden = false;
+  } catch (error) {
+    showAnalysisError(error.message);
+    previewInput.value = "";
+  }
+});
+
+trustedCodeInput.addEventListener("change", () => {
+  publishButton.disabled = !storageReady || !analyzedFolder
+    || (analyzedFolder.riskyFiles.length > 0 && !trustedCodeInput.checked);
 });
 
 chooseFolderButton.addEventListener("click", () => folderInput.click());
@@ -552,12 +680,11 @@ analyzeButton.addEventListener("click", async () => {
   analyzeButton.disabled = true;
   analyzeButton.textContent = "Menganalisis folder...";
   try {
-    const result = await analyzeFolder(files);
+    const result = await analyzeFolder(files, previewInput.files[0] || null);
     const duplicate = mods.some((mod) => mod.sha256 === result.sha256);
     if (duplicate) throw new Error("Folder dengan isi yang sama sudah ada di katalog browser ini.");
     analyzedFolder = result;
     showAnalysis(result);
-    publishButton.disabled = !storageReady;
     if (!storageReady) uploadStatus.textContent = "Penyimpanan browser tidak tersedia; mod belum bisa ditambahkan.";
   } catch (error) {
     showAnalysisError(error.message);
@@ -571,8 +698,13 @@ uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const selectedFiles = Array.from(folderInput.files);
   if (!storageReady || !analyzedFolder || analyzedFolder.files.length !== selectedFiles.length
-      || analyzedFolder.files.some((entry, index) => entry.file !== selectedFiles[index])) {
+      || analyzedFolder.files.some((entry, index) => entry.file !== selectedFiles[index])
+      || analyzedFolder.previewFile !== (previewInput.files[0] || null)
+      || (analyzedFolder.riskyFiles.length > 0 && !trustedCodeInput.checked)) {
     uploadStatus.textContent = "Pilih dan analisis folder sebelum menambahkannya.";
+    if (analyzedFolder?.riskyFiles.length && !trustedCodeInput.checked) {
+      uploadStatus.textContent = "Konfirmasi bahwa kamu percaya sumber file yang dapat menjalankan kode.";
+    }
     publishButton.disabled = true;
     return;
   }
@@ -581,34 +713,53 @@ uploadForm.addEventListener("submit", async (event) => {
   uploadStatus.textContent = "Menyimpan mod di browser ini...";
   const formData = new FormData(uploadForm);
   const category = formData.get("category");
+  const name = sanitizeUserText(formData.get("name"));
+  const author = sanitizeUserText(formData.get("author"));
+  const description = sanitizeUserText(formData.get("description"));
+  const version = sanitizeUserText(formData.get("version"));
+  if (!name || !author || !description || !version) {
+    uploadStatus.textContent = "Lengkapi nama mod, pembuat, versi, dan deskripsi dengan teks yang valid.";
+    publishButton.disabled = false;
+    return;
+  }
   const [background, color, symbol] = palettes[category] || palettes.Lainnya;
   const mod = {
     id: `community-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     fileId: "",
-    name: formData.get("name").trim(),
-    author: formData.get("author").trim(),
+    name,
+    author,
     category,
-    description: formData.get("description").trim(),
-    version: formData.get("version").trim(),
+    description,
+    version,
     size: formatSize(analyzedFolder.totalSize),
     symbol,
     background,
     color,
     sha256: analyzedFolder.sha256,
-    files: analyzedFolder.files.map(({ path, file }) => ({ path, file }))
+    files: analyzedFolder.files.map(({ path, file }) => ({ path, file })),
+    preview: analyzedFolder.previewFile
   };
   mod.fileId = mod.id;
 
   try {
     await saveUploadedMod(mod);
     mods.push(mod);
+    activeCategory = category;
+    searchInput.value = "";
     renderFilters();
     renderMods();
     uploadForm.reset();
     analyzedFolder = null;
     folderSelection.textContent = "Belum ada folder yang dipilih.";
+    trustedCodeInput.checked = false;
+    codeAcknowledgement.hidden = true;
+    if (previewSelectionUrl) URL.revokeObjectURL(previewSelectionUrl);
+    previewSelectionUrl = "";
+    previewThumbnail.hidden = true;
+    previewThumbnail.removeAttribute("src");
     analysisPanel.hidden = true;
     uploadStatus.textContent = "Mod berhasil ditambahkan ke katalog lokal. Mod ini hanya terlihat di browser dan perangkat ini.";
+    document.querySelector("#koleksi").scrollIntoView({ behavior: "smooth" });
   } catch (error) {
     uploadStatus.textContent = `Mod gagal disimpan: ${error.message}`;
     publishButton.disabled = false;
