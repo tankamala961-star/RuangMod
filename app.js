@@ -56,7 +56,7 @@ const initialMods = [
     description: "Paket suara komunitas untuk menambah variasi audio saat bermain SA-MP. Baca petunjuk pemasangan dan pastikan kompatibel dengan client yang digunakan.",
     version: "v1.0",
     size: "Belum tersedia",
-    symbol: "♫",
+    symbol: "🎙",
     downloadUrl: ""
   },
   {
@@ -94,17 +94,17 @@ const fileSignatures = {
 };
 const blockedFileExtensions = new Set([
   "exe", "msi", "msp", "com", "scr", "bat", "cmd", "ps1", "vbs", "vbe",
-  "jse", "wsf", "wsh", "hta", "js", "mjs", "cjs", "html", "htm", "xhtml",
+  "jse", "wsf", "wsh", "hta", "js", "mjs", "cjs",
   "svg", "url", "lnk", "website", "webloc", "reg", "sh", "bash", "zsh",
   "jar", "appx", "msix", "zip", "rar", "7z"
 ]);
-const codeExtensions = new Set(["asi", "dll", "cs", "lua", "cleo"]);
+const codeExtensions = new Set(["asi", "dll", "cs", "lua", "cleo", "html", "htm", "xhtml"]);
 const palettes = {
   Visual: ["#2b3123", "#d0f66d", "V"],
   UI: ["#252d32", "#a9d9e5", "⌗"],
   Tools: ["#332a22", "#f4b77a", "⌁"],
   Audio: ["#32252c", "#efa8c5", "♫"],
-  "Voice pack": ["#30252d", "#e7a5d2", "♫"],
+  "Voice pack": ["#30252d", "#e7a5d2", "🎙"],
   Vehicle: ["#292d24", "#c5e777", "V"],
   Gameplay: ["#30272b", "#f1a6a6", "G"],
 };
@@ -484,7 +484,7 @@ function showAnalysis(folder) {
     <span>Folder: ${escapeHtml(folder.folderName)} · ${folder.count} file · ${formatSize(folder.totalSize)}</span>
     <span>SHA-256 folder: <code>${folder.sha256}</code></span>
     ${folder.riskyFiles.length
-      ? `<span class="analysis-warning">Ditemukan komponen yang dapat menjalankan kode: ${folder.riskyFiles.map(escapeHtml).join(", ")}. Verifikasi sumbernya sebelum berbagi.</span>`
+      ? `<span class="analysis-warning">Ditemukan file aktif atau komponen yang dapat menjalankan kode: ${folder.riskyFiles.map(escapeHtml).join(", ")}. Situs tidak memindai isi file seperti antivirus. Verifikasi sumbernya dan jangan buka file HTML dari sumber yang tidak dipercaya.</span>`
       : ""}
     <span class="analysis-warning">Pemeriksaan browser bukan antivirus. Jangan jalankan mod atau ikuti tautan dari sumber yang tidak dipercaya.</span>
   `;
