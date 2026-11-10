@@ -50,6 +50,16 @@ const initialMods = [
     downloadUrl: ""
   },
   {
+    id: "samp-voice-pack",
+    name: "SA-MP Voice Pack",
+    category: "Voice pack",
+    description: "Paket suara komunitas untuk menambah variasi audio saat bermain SA-MP. Baca petunjuk pemasangan dan pastikan kompatibel dengan client yang digunakan.",
+    version: "v1.0",
+    size: "Belum tersedia",
+    symbol: "♫",
+    downloadUrl: ""
+  },
+  {
     id: "map-markers",
     name: "Map Marker Set",
     category: "UI",
@@ -94,6 +104,7 @@ const palettes = {
   UI: ["#252d32", "#a9d9e5", "⌗"],
   Tools: ["#332a22", "#f4b77a", "⌁"],
   Audio: ["#32252c", "#efa8c5", "♫"],
+  "Voice pack": ["#30252d", "#e7a5d2", "♫"],
   Kendaraan: ["#292d24", "#c5e777", "V"],
   Gameplay: ["#30272b", "#f1a6a6", "G"],
   Lainnya: ["#252b35", "#adc2f5", "✳"]
