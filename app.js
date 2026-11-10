@@ -32,7 +32,7 @@ const initialMods = [
   {
     id: "vehicle-pack",
     name: "Vehicle Pack SA-MP",
-    category: "Kendaraan",
+    category: "Vehicle",
     description: "Koleksi kendaraan kustom untuk memperbarui tampilan kendaraan di SA-MP. Baca petunjuk pemasangan dan pastikan kompatibel dengan server yang digunakan.",
     version: "v1.0",
     size: "Belum tersedia",
@@ -105,10 +105,10 @@ const palettes = {
   Tools: ["#332a22", "#f4b77a", "⌁"],
   Audio: ["#32252c", "#efa8c5", "♫"],
   "Voice pack": ["#30252d", "#e7a5d2", "♫"],
-  Kendaraan: ["#292d24", "#c5e777", "V"],
+  Vehicle: ["#292d24", "#c5e777", "V"],
   Gameplay: ["#30272b", "#f1a6a6", "G"],
-  Lainnya: ["#252b35", "#adc2f5", "✳"]
 };
+const collectionGrid = document.querySelector("#collection-grid");
 const grid = document.querySelector("#mod-grid");
 const filters = document.querySelector("#category-filters");
 const searchInput = document.querySelector("#search-input");
@@ -222,7 +222,7 @@ function renderMods() {
   const query = searchInput.value.trim().toLocaleLowerCase("id");
   if (activeCategory === "Semua") {
     const visibleCategories = Object.keys(palettes).filter((category) => category.toLocaleLowerCase("id").includes(query));
-    grid.innerHTML = visibleCategories.map((category) => {
+    collectionGrid.innerHTML = visibleCategories.map((category) => {
       const [background, color, symbol] = palettes[category];
       const modCount = mods.filter((mod) => mod.category === category).length;
       return `
@@ -244,10 +244,12 @@ function renderMods() {
         </article>
       `;
     }).join("");
+    grid.innerHTML = "";
 
     resultsCount.textContent = `${visibleCategories.length} KOLEKSI DITEMUKAN`;
     emptyState.hidden = visibleCategories.length > 0;
-    grid.hidden = visibleCategories.length === 0;
+    collectionGrid.hidden = visibleCategories.length === 0;
+    grid.hidden = true;
     emptyStateIcon.textContent = "⌕";
     emptyStateTitle.textContent = "Koleksi tidak ditemukan.";
     emptyStateDescription.textContent = "Coba kata kunci koleksi lain.";
@@ -255,6 +257,8 @@ function renderMods() {
     return;
   }
 
+  collectionGrid.innerHTML = "";
+  collectionGrid.hidden = true;
   const visibleMods = mods.filter((mod) => {
     const matchesCategory = mod.category === activeCategory;
     const searchableText = `${mod.name} ${mod.category} ${mod.description} ${mod.author || ""}`.toLocaleLowerCase("id");
@@ -262,7 +266,7 @@ function renderMods() {
   });
 
   grid.innerHTML = visibleMods.map((mod) => {
-    const [background, color, symbol] = palettes[mod.category] || palettes.Lainnya;
+    const [background, color, symbol] = palettes[mod.category] || palettes.Gameplay;
     const openLabel = mod.fileId ? "Buka folder ↗" : "Buka ↗";
     return `
       <article class="mod-card${mod.fileId ? " mod-card-folder" : ""}">
@@ -643,15 +647,17 @@ createFirstModButton.addEventListener("click", () => {
   uploadForm.elements.namedItem("name").focus({ preventScroll: true });
 });
 
-grid.addEventListener("click", (event) => {
+collectionGrid.addEventListener("click", (event) => {
   const categoryButton = event.target.closest("[data-open-category]");
   if (categoryButton) {
     activeCategory = categoryButton.dataset.openCategory;
     searchInput.value = "";
     renderFilters();
     renderMods();
-    return;
   }
+});
+
+grid.addEventListener("click", (event) => {
   const downloadButton = event.target.closest("[data-download-id]");
   if (downloadButton) {
     downloadUploadedMod(downloadButton.dataset.downloadId);
@@ -776,7 +782,7 @@ uploadForm.addEventListener("submit", async (event) => {
     publishButton.disabled = false;
     return;
   }
-  const [background, color, symbol] = palettes[category] || palettes.Lainnya;
+  const [background, color, symbol] = palettes[category] || palettes.Gameplay;
   const mod = {
     id: `community-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     fileId: "",
@@ -833,6 +839,10 @@ async function initialize() {
   try {
     database = await openDatabase();
     const uploadedMods = await getUploadedMods();
+    uploadedMods.forEach((mod) => {
+      if (mod.category === "Kendaraan") mod.category = "Vehicle";
+      if (mod.category === "Lainnya") mod.category = "Gameplay";
+    });
     mods.push(...uploadedMods);
     storageReady = true;
     renderFilters();
