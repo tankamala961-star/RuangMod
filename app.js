@@ -126,49 +126,81 @@ const analysisPanel = document.querySelector("#analysis-result");
 const analyzeButton = document.querySelector("#analyze-button");
 const publishButton = document.querySelector("#publish-button");
 const uploadStatus = document.querySelector("#upload-status");
+const authForm = document.querySelector("#auth-form");
+const authEmail = document.querySelector("#auth-email");
+const authPassword = document.querySelector("#auth-password");
+const authStatus = document.querySelector("#auth-status");
+const signInButton = document.querySelector("#sign-in-button");
+const signUpButton = document.querySelector("#sign-up-button");
+const signOutButton = document.querySelector("#sign-out-button");
+const googleSignInButton = document.querySelector("#google-sign-in-button");
 let mods = [...initialMods];
 let activeCategory = "Semua";
 let analyzedFolder = null;
 let previewSelectionUrl = "";
 let storageReady = false;
-let database;
+let currentUser = null;
+let supabaseClient;
 const previewUrls = new Map();
+const maxUploadBytes = 100 * 1024 * 1024;
+const supabaseConfig = window.RUANGMOD_SUPABASE;
 
-function openDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ruangmod-community", 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore("mods", { keyPath: "id" });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+function updateAuthInterface() {
+  const signedIn = Boolean(currentUser);
+  authEmail.disabled = signedIn;
+  authPassword.disabled = signedIn;
+  signInButton.hidden = signedIn;
+  signUpButton.hidden = signedIn;
+  signOutButton.hidden = !signedIn;
+  googleSignInButton.hidden = signedIn;
+  authStatus.textContent = signedIn ? "Akun aktif." : "Masuk atau daftar untuk mengunggah mod.";
+  publishButton.disabled = !storageReady || !currentUser || !analyzedFolder
+    || (analyzedFolder.riskyFiles.length > 0 && !trustedCodeInput.checked);
 }
 
-function getUploadedMods() {
-  return new Promise((resolve, reject) => {
-    const request = database.transaction("mods", "readonly").objectStore("mods").getAll();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+function addCommunityMod(mod) {
+  mods = [mod, ...mods.filter((existing) => existing.id !== mod.id)];
+  renderFilters();
+  renderMods();
 }
 
-function saveUploadedMod(mod) {
-  return new Promise((resolve, reject) => {
-    const transaction = database.transaction("mods", "readwrite");
-    transaction.objectStore("mods").put(mod);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error || new Error("Penyimpanan dibatalkan."));
-  });
+function toCommunityMod(row) {
+  const bucket = supabaseClient.storage.from(supabaseConfig.bucket);
+  const [background, color, symbol] = palettes[row.category] || palettes.Gameplay;
+  return {
+    id: row.id,
+    name: row.name,
+    author: row.author,
+    category: row.category,
+    description: row.description,
+    version: row.version,
+    size: formatSize(row.size_bytes),
+    symbol,
+    background,
+    color,
+    sha256: row.sha256,
+    archivePath: row.archive_path,
+    downloadUrl: bucket.getPublicUrl(row.archive_path).data.publicUrl,
+    preview: row.preview_path ? bucket.getPublicUrl(row.preview_path).data.publicUrl : "",
+    createdAt: row.created_at
+  };
 }
 
-function getUploadedMod(id) {
-  return new Promise((resolve, reject) => {
-    const request = database.transaction("mods", "readonly").objectStore("mods").get(id);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+async function refreshCommunityMods() {
+  const { data, error } = await supabaseClient
+    .from("mods")
+    .select("id,name,author,category,description,version,size_bytes,sha256,archive_path,preview_path,created_at")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const communityMods = data.map(toCommunityMod);
+  const initialIds = new Set(initialMods.map((mod) => mod.id));
+  mods = [...initialMods, ...communityMods.filter((mod) => !initialIds.has(mod.id))];
+  renderFilters();
+  renderMods();
+}
+
+function getErrorMessage(error) {
+  return error?.message || "Terjadi kesalahan yang tidak diketahui.";
 }
 
 function escapeHtml(value) {
@@ -205,6 +237,7 @@ function renderFilters() {
 
 function getPreviewUrl(mod) {
   if (!mod.preview) return "";
+  if (typeof mod.preview === "string") return mod.preview;
   const cached = previewUrls.get(mod.id);
   if (cached && cached.file === mod.preview) return cached.url;
   if (cached) URL.revokeObjectURL(cached.url);
@@ -215,7 +248,7 @@ function getPreviewUrl(mod) {
 
 function renderMods() {
   const query = searchInput.value.trim().toLocaleLowerCase("id");
-  if (activeCategory === "Semua") {
+  if (activeCategory === "Semua" && !query) {
     const visibleCategories = Object.keys(palettes).filter((category) => category.toLocaleLowerCase("id").includes(query));
     collectionGrid.innerHTML = visibleCategories.map((category) => {
       const [background, color, symbol] = palettes[category];
@@ -255,16 +288,16 @@ function renderMods() {
   collectionGrid.innerHTML = "";
   collectionGrid.hidden = true;
   const visibleMods = mods.filter((mod) => {
-    const matchesCategory = mod.category === activeCategory;
+    const matchesCategory = activeCategory === "Semua" || mod.category === activeCategory;
     const searchableText = `${mod.name} ${mod.category} ${mod.description} ${mod.author || ""}`.toLocaleLowerCase("id");
     return matchesCategory && searchableText.includes(query);
   });
 
   grid.innerHTML = visibleMods.map((mod) => {
     const [background, color, symbol] = palettes[mod.category] || palettes.Gameplay;
-    const openLabel = mod.fileId ? "Buka folder ↗" : "Buka ↗";
+    const openLabel = mod.archivePath ? "Buka folder ↗" : "Buka ↗";
     return `
-      <article class="mod-card${mod.fileId ? " mod-card-folder" : ""}">
+      <article class="mod-card${mod.archivePath ? " mod-card-folder" : ""}">
         <div class="card-art" style="--card-bg:${background};--card-color:${color}">
           ${mod.preview
             ? `<img class="card-preview" src="${getPreviewUrl(mod)}" alt="Preview ${escapeHtml(mod.name)}" loading="lazy">`
@@ -273,7 +306,7 @@ function renderMods() {
         <div class="card-body">
           <div class="card-topline">
             <span class="category-tag">${escapeHtml(mod.category)}</span>
-            ${mod.fileId ? '<span class="folder-tag">▰ FOLDER MOD</span>' : ""}
+            ${mod.archivePath ? '<span class="folder-tag">▰ FOLDER MOD</span>' : ""}
           </div>
           <h3>${escapeHtml(mod.name)}</h3>
           <p>${escapeHtml(mod.description)}</p>
@@ -322,31 +355,21 @@ function showDetails(mod) {
   const downloadNote = document.querySelector("#dialog-download-note");
   const unavailableNote = document.querySelector("#dialog-unavailable");
   const safeDownloadUrl = getSafeDownloadUrl(mod.downloadUrl);
-  downloadLink.hidden = !safeDownloadUrl && !mod.fileId;
-  unavailableNote.hidden = Boolean(safeDownloadUrl || mod.fileId);
-  downloadNote.hidden = !mod.fileId;
-  if (mod.fileId) {
-    downloadLink.href = "#";
-    downloadLink.dataset.downloadId = mod.fileId;
-    downloadLink.removeAttribute("download");
-  } else if (safeDownloadUrl) {
-    downloadLink.href = safeDownloadUrl;
-    downloadLink.download = "";
-    delete downloadLink.dataset.downloadId;
-  } else {
-    downloadLink.removeAttribute("download");
-    delete downloadLink.dataset.downloadId;
-  }
+  downloadLink.hidden = !safeDownloadUrl;
+  unavailableNote.hidden = Boolean(safeDownloadUrl);
+  downloadNote.hidden = !mod.archivePath;
+  downloadLink.href = safeDownloadUrl || "#";
+  if (safeDownloadUrl) downloadLink.setAttribute("download", "");
+  else downloadLink.removeAttribute("download");
   dialog.showModal();
 }
 
 function getSafeDownloadUrl(value) {
-  if (typeof value !== "string" || !value.trim() || value.startsWith("//")) return "";
-  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return "";
+  if (typeof value !== "string" || !value.trim()) return "";
   try {
-    const url = new URL(value, location.href);
-    if (url.username || url.password || url.origin !== location.origin) return "";
-    if (url.protocol !== location.protocol || !["http:", "https:", "file:"].includes(url.protocol)) return "";
+    const url = new URL(value);
+    const trustedOrigin = new URL(supabaseConfig.url).origin;
+    if (url.username || url.password || url.origin !== trustedOrigin || url.protocol !== "https:") return "";
     return url.href;
   } catch {
     return "";
@@ -438,6 +461,9 @@ async function analyzeFolder(fileList, previewFile) {
     analyzedFiles.push({ path, file, sha256: result.sha256 });
     if (riskyFileExtensions.has(extension)) riskyFiles.push(path);
     totalSize += file.size;
+    if (totalSize > maxUploadBytes) {
+      throw new Error(`Ukuran folder melebihi batas ${formatSize(maxUploadBytes)}.`);
+    }
     fingerprintParts.push(`${path}\0${result.sha256}\0`);
   }
 
@@ -468,24 +494,13 @@ function showAnalysis(folder) {
   analysisPanel.hidden = false;
   trustedCodeInput.checked = false;
   codeAcknowledgement.hidden = folder.riskyFiles.length === 0;
-  publishButton.disabled = !storageReady || folder.riskyFiles.length > 0;
+  publishButton.disabled = !storageReady || !currentUser || folder.riskyFiles.length > 0;
 }
 
 function showAnalysisError(message) {
   analysisPanel.classList.add("analysis-error");
   analysisPanel.textContent = message;
   analysisPanel.hidden = false;
-}
-
-function createDownload(file, filename) {
-  const url = URL.createObjectURL(file);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 const crc32Table = Uint32Array.from({ length: 256 }, (_, index) => {
@@ -592,23 +607,6 @@ function sanitizeFilename(name) {
   return name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "").trim() || "mod";
 }
 
-async function downloadUploadedMod(id) {
-  try {
-    const mod = await getUploadedMod(id);
-    if (!mod) throw new Error("Mod tidak ditemukan di penyimpanan browser ini.");
-    if (Array.isArray(mod.files)) {
-      const zip = await createZip(mod.files, mod.folderName || mod.name);
-      createDownload(zip, `${sanitizeFilename(mod.name)}.zip`);
-    } else if (mod.file) {
-      createDownload(mod.file, mod.file.name);
-    } else {
-      throw new Error("File mod tidak ditemukan di penyimpanan browser ini.");
-    }
-  } catch (error) {
-    uploadStatus.textContent = `Unduhan gagal: ${error.message}`;
-  }
-}
-
 filters.addEventListener("click", (event) => {
   const button = event.target.closest("[data-category]");
   if (!button) return;
@@ -637,22 +635,10 @@ collectionGrid.addEventListener("click", (event) => {
 });
 
 grid.addEventListener("click", (event) => {
-  const downloadButton = event.target.closest("[data-download-id]");
-  if (downloadButton) {
-    downloadUploadedMod(downloadButton.dataset.downloadId);
-    return;
-  }
   const button = event.target.closest("[data-details]");
   if (!button) return;
   const mod = mods.find((item) => item.id === button.dataset.details);
   if (mod) showDetails(mod);
-});
-
-document.querySelector("#dialog-download").addEventListener("click", (event) => {
-  const link = event.currentTarget;
-  if (!link.dataset.downloadId) return;
-  event.preventDefault();
-  downloadUploadedMod(link.dataset.downloadId);
 });
 
 document.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
@@ -701,11 +687,84 @@ previewInput.addEventListener("change", async () => {
 });
 
 trustedCodeInput.addEventListener("change", () => {
-  publishButton.disabled = !storageReady || !analyzedFolder
+  publishButton.disabled = !storageReady || !currentUser || !analyzedFolder
     || (analyzedFolder.riskyFiles.length > 0 && !trustedCodeInput.checked);
 });
 
 chooseFolderButton.addEventListener("click", () => folderInput.click());
+
+authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await authenticate("signInWithPassword");
+});
+
+signUpButton.addEventListener("click", async () => {
+  if (!authForm.reportValidity()) return;
+  await authenticate("signUp");
+});
+
+googleSignInButton.addEventListener("click", async () => {
+  if (!supabaseClient) {
+    authStatus.textContent = "Koneksi Supabase belum siap. Muat ulang halaman atau periksa konfigurasi.";
+    return;
+  }
+  googleSignInButton.disabled = true;
+  authStatus.textContent = "Mengalihkan ke Google untuk memilih akun...";
+  try {
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${location.origin}${location.pathname}`,
+        queryParams: { prompt: "select_account" }
+      }
+    });
+    if (error) throw error;
+  } catch (error) {
+    authStatus.textContent = `Login Google gagal: ${getErrorMessage(error)}`;
+    googleSignInButton.disabled = false;
+  }
+});
+
+async function authenticate(action) {
+  if (!supabaseClient) {
+    authStatus.textContent = "Koneksi Supabase belum siap. Muat ulang halaman atau periksa konfigurasi.";
+    return;
+  }
+  signInButton.disabled = true;
+  signUpButton.disabled = true;
+  const credentials = { email: authEmail.value.trim(), password: authPassword.value };
+  let feedback = "";
+  try {
+    const { data, error } = await supabaseClient.auth[action](credentials);
+    if (error) throw error;
+    currentUser = data.session ? data.user : null;
+    authPassword.value = "";
+    if (action === "signUp" && !data.session) {
+      feedback = "Akun dibuat. Periksa email untuk konfirmasi, lalu masuk.";
+    }
+  } catch (error) {
+    feedback = `Autentikasi gagal: ${getErrorMessage(error)}`;
+  } finally {
+    signInButton.disabled = false;
+    signUpButton.disabled = false;
+    updateAuthInterface();
+  }
+  if (feedback) authStatus.textContent = feedback;
+}
+
+signOutButton.addEventListener("click", async () => {
+  signOutButton.disabled = true;
+  try {
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) throw error;
+    currentUser = null;
+    updateAuthInterface();
+  } catch (error) {
+    authStatus.textContent = `Gagal keluar: ${getErrorMessage(error)}`;
+  } finally {
+    signOutButton.disabled = false;
+  }
+});
 
 analyzeButton.addEventListener("click", async () => {
   const files = Array.from(folderInput.files);
@@ -724,7 +783,7 @@ analyzeButton.addEventListener("click", async () => {
     if (duplicate) throw new Error("Folder dengan isi yang sama sudah ada di katalog browser ini.");
     analyzedFolder = result;
     showAnalysis(result);
-    if (!storageReady) uploadStatus.textContent = "Penyimpanan browser tidak tersedia; mod belum bisa ditambahkan.";
+    if (!storageReady) uploadStatus.textContent = "Supabase belum siap; mod belum bisa diunggah.";
   } catch (error) {
     showAnalysisError(error.message);
   } finally {
@@ -736,11 +795,13 @@ analyzeButton.addEventListener("click", async () => {
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const selectedFiles = Array.from(folderInput.files);
-  if (!storageReady || !analyzedFolder || analyzedFolder.files.length !== selectedFiles.length
+  if (!storageReady || !currentUser || !analyzedFolder || analyzedFolder.files.length !== selectedFiles.length
       || analyzedFolder.files.some((entry, index) => entry.file !== selectedFiles[index])
       || analyzedFolder.previewFile !== (previewInput.files[0] || null)
       || (analyzedFolder.riskyFiles.length > 0 && !trustedCodeInput.checked)) {
-    uploadStatus.textContent = "Pilih dan analisis folder sebelum menambahkannya.";
+    uploadStatus.textContent = !currentUser
+      ? "Masuk ke akun terlebih dahulu untuk mengunggah."
+      : "Pilih dan analisis folder sebelum menambahkannya.";
     if (analyzedFolder?.riskyFiles.length && !trustedCodeInput.checked) {
       uploadStatus.textContent = "Konfirmasi bahwa kamu percaya sumber file yang dapat menjalankan kode.";
     }
@@ -749,7 +810,7 @@ uploadForm.addEventListener("submit", async (event) => {
   }
 
   publishButton.disabled = true;
-  uploadStatus.textContent = "Menyimpan mod di browser ini...";
+  uploadStatus.textContent = "Membuat arsip dan mengunggah ke RuangMod...";
   const formData = new FormData(uploadForm);
   const category = formData.get("category");
   const name = sanitizeUserText(formData.get("name"));
@@ -761,29 +822,66 @@ uploadForm.addEventListener("submit", async (event) => {
     publishButton.disabled = false;
     return;
   }
-  const [background, color, symbol] = palettes[category] || palettes.Gameplay;
+  const modId = crypto.randomUUID();
+  const archivePath = `${currentUser.id}/${modId}.zip`;
+  const previewFile = analyzedFolder.previewFile;
+  const previewPath = previewFile
+    ? `${currentUser.id}/${modId}-preview.${previewFile.name.split(".").pop().toLowerCase()}`
+    : null;
   const mod = {
-    id: `community-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    fileId: "",
+    id: modId,
+    user_id: currentUser.id,
     name,
     author,
     category,
     description,
     version,
-    folderName: analyzedFolder.folderName,
-    size: formatSize(analyzedFolder.totalSize),
-    symbol,
-    background,
-    color,
+    size_bytes: analyzedFolder.totalSize,
     sha256: analyzedFolder.sha256,
-    files: analyzedFolder.files.map(({ path, file }) => ({ path, file })),
-    preview: analyzedFolder.previewFile
+    archive_path: archivePath,
+    preview_path: previewPath
   };
-  mod.fileId = mod.id;
+  const bucket = supabaseClient.storage.from(supabaseConfig.bucket);
+  const uploadedPaths = [];
+  let metadataSaved = false;
 
   try {
-    await saveUploadedMod(mod);
-    mods.push(mod);
+    const archive = await createZip(analyzedFolder.files, analyzedFolder.folderName);
+    if (archive.size > maxUploadBytes) {
+      throw new Error(`Arsip ZIP melebihi batas ${formatSize(maxUploadBytes)}.`);
+    }
+    const { error: archiveError } = await bucket.upload(archivePath, archive, {
+      contentType: "application/zip",
+      cacheControl: "3600",
+      upsert: false
+    });
+    if (archiveError) throw archiveError;
+    uploadedPaths.push(archivePath);
+
+    if (previewFile && previewPath) {
+      const { error: previewError } = await bucket.upload(previewPath, previewFile, {
+        contentType: {
+          png: "image/png",
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          webp: "image/webp"
+        }[previewFile.name.split(".").pop().toLowerCase()],
+        cacheControl: "3600",
+        upsert: false
+      });
+      if (previewError) throw previewError;
+      uploadedPaths.push(previewPath);
+    }
+
+    const { data, error: insertError } = await supabaseClient
+      .from("mods")
+      .insert(mod)
+      .select("id,name,author,category,description,version,size_bytes,sha256,archive_path,preview_path,created_at")
+      .single();
+    if (insertError) throw insertError;
+    metadataSaved = true;
+
+    addCommunityMod(toCommunityMod(data));
     activeCategory = category;
     searchInput.value = "";
     renderFilters();
@@ -798,11 +896,22 @@ uploadForm.addEventListener("submit", async (event) => {
     previewThumbnail.hidden = true;
     previewThumbnail.removeAttribute("src");
     analysisPanel.hidden = true;
-    uploadStatus.textContent = "Mod berhasil ditambahkan ke katalog lokal. Mod ini hanya terlihat di browser dan perangkat ini.";
+    uploadStatus.textContent = "Mod berhasil diterbitkan dan kini tersedia untuk semua pengunjung.";
     document.querySelector("#koleksi").scrollIntoView({ behavior: "smooth" });
   } catch (error) {
-    uploadStatus.textContent = `Mod gagal disimpan: ${error.message}`;
-    publishButton.disabled = false;
+    let message = `Mod gagal diunggah: ${getErrorMessage(error)}`;
+    if (metadataSaved) {
+      message = `Mod sudah diterbitkan, tetapi tampilan gagal diperbarui: ${getErrorMessage(error)}`;
+    } else if (uploadedPaths.length) {
+      try {
+        const { error: cleanupError } = await bucket.remove(uploadedPaths);
+        if (cleanupError) message += ` File sementara gagal dibersihkan: ${getErrorMessage(cleanupError)}`;
+      } catch (cleanupError) {
+        message += ` File sementara gagal dibersihkan: ${getErrorMessage(cleanupError)}`;
+      }
+    }
+    uploadStatus.textContent = message;
+    updateAuthInterface();
   }
 });
 
@@ -817,19 +926,43 @@ async function initialize() {
   renderFilters();
   renderMods();
   try {
-    database = await openDatabase();
-    const uploadedMods = await getUploadedMods();
-    uploadedMods.forEach((mod) => {
-      if (mod.category === "Kendaraan") mod.category = "Vehicle";
-      if (mod.category === "Lainnya") mod.category = "Gameplay";
+    if (!supabaseConfig?.url || !supabaseConfig?.publishableKey || !window.supabase?.createClient) {
+      throw new Error("Konfigurasi Supabase atau pustaka klien tidak ditemukan.");
+    }
+    supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.publishableKey);
+    const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+    if (sessionError) throw sessionError;
+    currentUser = sessionData.session?.user || null;
+    updateAuthInterface();
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      currentUser = session?.user || null;
+      updateAuthInterface();
     });
-    mods.push(...uploadedMods);
+    await refreshCommunityMods();
     storageReady = true;
-    renderFilters();
-    renderMods();
+    updateAuthInterface();
+    supabaseClient
+      .channel("ruangmod-public-mods")
+      .on("postgres_changes", { event: "*", schema: "public", table: "mods" }, () => {
+        refreshCommunityMods().catch((error) => {
+          authStatus.textContent = `Pembaruan koleksi gagal: ${getErrorMessage(error)}`;
+        });
+      })
+      .subscribe((status, error) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          authStatus.textContent = `Pembaruan langsung tidak tersedia: ${getErrorMessage(error)}`;
+        }
+      });
+    window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      refreshCommunityMods().catch((error) => {
+        authStatus.textContent = `Pembaruan koleksi gagal: ${getErrorMessage(error)}`;
+      });
+    }, 30_000);
   } catch (error) {
-    uploadStatus.textContent = `Penyimpanan lokal tidak tersedia: ${error.message}`;
-    analyzeButton.disabled = true;
+    updateAuthInterface();
+    authStatus.textContent = `Koneksi Supabase gagal: ${getErrorMessage(error)}`;
+    uploadStatus.textContent = "Periksa setup Supabase dan jalankan SQL pada file SUPABASE_SETUP.md.";
   }
 }
 
