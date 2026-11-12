@@ -41,6 +41,12 @@ update public.mods
 set is_published = false
 where id = '3409d63e-c101-4ce2-b3b0-e1c9176bfd13'::uuid;
 
+update public.mods
+set is_published = false
+where category = 'Vehicles'
+  and lower(btrim(name)) = 'mod benson'
+  and is_published;
+
 create table if not exists public.mod_category_counts (
   category text primary key check (category in ('UI', 'Gameplay', 'Vehicles', 'Voice pack', 'Tools', 'Audio', 'Visual')),
   mod_count bigint not null check (mod_count >= 0),

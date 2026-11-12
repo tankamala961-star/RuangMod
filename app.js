@@ -220,7 +220,7 @@ function renderFilters() {
         const [background, color, symbol, description] = palettes[category];
         const count = displayedCounts.get(category);
         const categoryMods = mods.filter((mod) => mod.category === category && matchesSearch(mod));
-        const showMods = activeCategory === "Semua" || activeCategory === category;
+        const showMods = activeCategory === category;
         const emptyMessage = categoryMods.length === 0 && (activeCategory === category || (activeCategory === "Semua" && query))
           ? `<div class="category-mod-empty">
               <span>${query ? "Tidak ada mod yang cocok dengan pencarian." : `Belum ada mod di kategori ${escapeHtml(category)}.`}</span>
