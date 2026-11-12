@@ -20,18 +20,11 @@ const palettes = {
   Audio: ["#32252c", "#efa8c5", "♫", "Musik dan efek suara"],
   Visual: ["#2b3123", "#d0f66d", "✦", "Grafis dan lingkungan"]
 };
-const grid = document.querySelector("#mod-grid");
 const filters = document.querySelector("#category-filters");
 const categoryCountStatus = document.querySelector("#category-count-status");
 const searchInput = document.querySelector("#search-input");
-const resultsCount = document.querySelector("#results-count");
 const catalogStatus = document.querySelector("#catalog-status");
 const catalogRetryButton = document.querySelector("#catalog-retry");
-const emptyState = document.querySelector("#empty-state");
-const emptyStateIcon = document.querySelector("#empty-state-icon");
-const emptyStateTitle = document.querySelector("#empty-state-title");
-const emptyStateDescription = document.querySelector("#empty-state-description");
-const createFirstModButton = document.querySelector("#create-first-mod");
 const dialog = document.querySelector("#mod-dialog");
 const uploadForm = document.querySelector("#upload-form");
 const folderInput = document.querySelector("#upload-folder");
@@ -87,7 +80,6 @@ function updateAuthInterface() {
 
 function addCommunityMod(mod) {
   mods = [mod, ...mods.filter((existing) => existing.id !== mod.id)];
-  renderFilters();
   renderMods();
 }
 
@@ -146,7 +138,6 @@ async function refreshCommunityMods() {
   const loadedMods = await Promise.all(rows.map(toCommunityMod));
   if (requestId !== catalogRequestId) return;
   mods = loadedMods;
-  renderFilters();
   renderMods();
   catalogStatus.hidden = true;
   catalogRetryButton.hidden = true;
@@ -215,6 +206,11 @@ function renderFilters() {
   }
   const formatCount = (count) => new Intl.NumberFormat("id-ID").format(count);
   const totalCount = [...displayedCounts.values()].reduce((total, count) => total + count, 0);
+  const query = searchInput.value.trim().toLocaleLowerCase("id");
+  const matchesSearch = (mod) => {
+    const searchableText = `${mod.name} ${mod.category} ${mod.description} ${mod.author || ""}`.toLocaleLowerCase("id");
+    return searchableText.includes(query);
+  };
   filters.innerHTML = `
     <button class="filter-all" type="button" data-category="Semua" aria-pressed="${activeCategory === "Semua"}">
       Semua kategori <span>${formatCount(totalCount)} mod</span>
@@ -223,6 +219,14 @@ function renderFilters() {
       ${categories.map((category) => {
         const [background, color, symbol, description] = palettes[category];
         const count = displayedCounts.get(category);
+        const categoryMods = mods.filter((mod) => mod.category === category && matchesSearch(mod));
+        const showMods = activeCategory === "Semua" || activeCategory === category;
+        const emptyMessage = categoryMods.length === 0 && (activeCategory === category || (activeCategory === "Semua" && query))
+          ? `<div class="category-mod-empty">
+              <span>${query ? "Tidak ada mod yang cocok dengan pencarian." : `Belum ada mod di kategori ${escapeHtml(category)}.`}</span>
+              ${query || activeCategory !== category ? "" : `<button class="create-category-mod" type="button" data-create-category="${escapeHtml(category)}">Bagikan mod pertama di ${escapeHtml(category)}</button>`}
+            </div>`
+          : "";
         return `
           <article class="category-card${category === activeCategory ? " category-card-active" : ""}">
             <span class="category-card-art" style="--card-bg:${background};--card-color:${color}" aria-hidden="true">
@@ -231,11 +235,41 @@ function renderFilters() {
             <span class="category-card-title">${escapeHtml(category)}</span>
             <span class="category-card-description">${escapeHtml(description)}</span>
             <span class="category-card-count">${formatCount(count)} mod</span>
-            <button class="category-card-open" type="button" data-category="${escapeHtml(category)}" aria-pressed="${category === activeCategory}">BUKA</button>
+            <button class="category-card-open" type="button" data-category="${escapeHtml(category)}" aria-pressed="${category === activeCategory}" aria-expanded="${showMods}">BUKA</button>
+            <div class="category-mod-list"${showMods ? "" : " hidden"}>
+              ${categoryMods.map(renderModCard).join("")}
+              ${emptyMessage}
+            </div>
           </article>
         `;
       }).join("")}
     </div>
+  `;
+}
+
+function renderModCard(mod) {
+  const [background, color, symbol] = palettes[mod.category] || palettes.Gameplay;
+  const openLabel = mod.archivePath ? "Buka folder ↗" : "Buka ↗";
+  return `
+    <article class="mod-card${mod.archivePath ? " mod-card-folder" : ""}">
+      <div class="card-art" style="--card-bg:${background};--card-color:${color}">
+        ${mod.preview
+          ? `<img class="card-preview" src="${getPreviewUrl(mod)}" alt="Preview ${escapeHtml(mod.name)}" loading="lazy">`
+          : `<span class="card-symbol" aria-hidden="true">${escapeHtml(mod.symbol || symbol)}</span>`}
+      </div>
+      <div class="card-body">
+        <div class="card-topline">
+          <span class="category-tag">${escapeHtml(mod.category)}</span>
+          ${mod.archivePath ? '<span class="folder-tag">▰ FOLDER MOD</span>' : ""}
+        </div>
+        <h3>${escapeHtml(mod.name)}</h3>
+        <p>${escapeHtml(mod.description)}</p>
+        ${mod.author ? `<p class="card-author">Dibagikan oleh ${escapeHtml(mod.author)}</p>` : ""}
+        <div class="card-actions">
+          <button class="details-button" type="button" data-details="${escapeHtml(mod.id)}">${openLabel}</button>
+        </div>
+      </div>
+    </article>
   `;
 }
 
@@ -281,51 +315,7 @@ function getPreviewUrl(mod) {
 }
 
 function renderMods() {
-  const query = searchInput.value.trim().toLocaleLowerCase("id");
-  const visibleMods = mods.filter((mod) => {
-    const matchesCategory = activeCategory === "Semua" || mod.category === activeCategory;
-    const searchableText = `${mod.name} ${mod.category} ${mod.description} ${mod.author || ""}`.toLocaleLowerCase("id");
-    return matchesCategory && searchableText.includes(query);
-  });
-
-  grid.innerHTML = visibleMods.map((mod) => {
-    const [background, color, symbol] = palettes[mod.category] || palettes.Gameplay;
-    const openLabel = mod.archivePath ? "Buka folder ↗" : "Buka ↗";
-    return `
-      <article class="mod-card${mod.archivePath ? " mod-card-folder" : ""}">
-        <div class="card-art" style="--card-bg:${background};--card-color:${color}">
-          ${mod.preview
-            ? `<img class="card-preview" src="${getPreviewUrl(mod)}" alt="Preview ${escapeHtml(mod.name)}" loading="lazy">`
-            : `<span class="card-symbol" aria-hidden="true">${escapeHtml(mod.symbol || symbol)}</span>`}
-        </div>
-        <div class="card-body">
-          <div class="card-topline">
-            <span class="category-tag">${escapeHtml(mod.category)}</span>
-            ${mod.archivePath ? '<span class="folder-tag">▰ FOLDER MOD</span>' : ""}
-          </div>
-          <h3>${escapeHtml(mod.name)}</h3>
-          <p>${escapeHtml(mod.description)}</p>
-          ${mod.author ? `<p class="card-author">Dibagikan oleh ${escapeHtml(mod.author)}</p>` : ""}
-          <div class="card-actions">
-            <button class="details-button" type="button" data-details="${escapeHtml(mod.id)}">${openLabel}</button>
-          </div>
-        </div>
-      </article>
-    `;
-  }).join("");
-
-  resultsCount.textContent = `${visibleMods.length} MOD DITEMUKAN`;
-  emptyState.hidden = visibleMods.length > 0;
-  grid.hidden = visibleMods.length === 0;
-  const isEmptyArchive = visibleMods.length === 0 && !query;
-  emptyStateIcon.textContent = isEmptyArchive ? "＋" : "⌕";
-  emptyStateTitle.textContent = isEmptyArchive
-    ? activeCategory === "Semua" ? "Belum ada mod di katalog." : `Belum ada mod di arsip ${activeCategory}.`
-    : "Belum ada mod yang cocok.";
-  emptyStateDescription.textContent = isEmptyArchive
-    ? "Jadilah yang pertama membagikan mod ke katalog komunitas."
-    : "Coba kata kunci atau kategori lain.";
-  createFirstModButton.hidden = !isEmptyArchive;
+  renderFilters();
 }
 
 function showDetails(mod) {
@@ -679,21 +669,28 @@ function sanitizeFilename(name) {
 }
 
 filters.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-category]");
-  if (!button) return;
-  activeCategory = button.dataset.category;
-  renderFilters();
+  const detailsButton = event.target.closest("[data-details]");
+  if (detailsButton) {
+    const mod = mods.find((item) => item.id === detailsButton.dataset.details);
+    if (mod) showDetails(mod);
+    return;
+  }
+
+  const createButton = event.target.closest("[data-create-category]");
+  if (createButton) {
+    uploadForm.elements.namedItem("category").value = createButton.dataset.createCategory;
+    document.querySelector("#bagikan").scrollIntoView({ behavior: "smooth" });
+    uploadForm.elements.namedItem("name").focus({ preventScroll: true });
+    return;
+  }
+
+  const categoryButton = event.target.closest("[data-category]");
+  if (!categoryButton) return;
+  activeCategory = categoryButton.dataset.category;
   renderMods();
 });
 
 searchInput.addEventListener("input", renderMods);
-
-createFirstModButton.addEventListener("click", () => {
-  const categorySelect = uploadForm.elements.namedItem("category");
-  if (activeCategory !== "Semua") categorySelect.value = activeCategory;
-  document.querySelector("#bagikan").scrollIntoView({ behavior: "smooth" });
-  uploadForm.elements.namedItem("name").focus({ preventScroll: true });
-});
 
 catalogRetryButton.addEventListener("click", async () => {
   catalogRetryButton.disabled = true;
@@ -706,13 +703,6 @@ catalogRetryButton.addEventListener("click", async () => {
   } finally {
     catalogRetryButton.disabled = false;
   }
-});
-
-grid.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-details]");
-  if (!button) return;
-  const mod = mods.find((item) => item.id === button.dataset.details);
-  if (mod) showDetails(mod);
 });
 
 function closeDialog() {
@@ -974,7 +964,6 @@ uploadForm.addEventListener("submit", async (event) => {
     addCommunityMod(await toCommunityMod(data));
     activeCategory = category;
     searchInput.value = "";
-    renderFilters();
     renderMods();
     uploadForm.reset();
     analyzedFolder = null;
@@ -1013,7 +1002,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function initialize() {
-  renderFilters();
+  renderMods();
   catalogStatus.hidden = false;
   catalogStatus.textContent = "Memuat mod terbaru dari Supabase...";
   catalogRetryButton.hidden = true;
