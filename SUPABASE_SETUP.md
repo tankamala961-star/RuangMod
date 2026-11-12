@@ -42,7 +42,7 @@ Menyimpan file lokal saja tidak menerbitkan perubahan ke internet. Deployment pa
 - Setelah SQL diterapkan, tautan publik lama ke ZIP tidak lagi berfungsi. Pengunjung perlu login Google, lalu menekan tombol unduh lagi setelah kembali ke situs. File yang sudah diunduh sebelumnya atau salinan yang dibagikan di luar situs tidak dapat ditarik kembali.
 - Batas arsip adalah 100 MiB. Sesuaikan batas ini di SQL dan `app.js` hanya bila paket dan kuota proyek memang mendukungnya.
 - Daftar katalog diperbarui melalui Supabase Realtime; polling berkala menjadi cadangan saat halaman aktif.
-- Jumlah pada kartu kategori berasal dari `public.mod_category_counts`, tabel ringkasan yang diperbarui oleh `pg_cron` setiap 30 menit. SQL menjalankan satu analisis awal saat dipasang; halaman menampilkan waktu analisis terakhir dan mengambil ulang ringkasan setiap 30 menit serta saat tab kembali aktif. Perubahan katalog tampil di jumlah setelah analisis terjadwal berikutnya.
+- Jumlah pada kartu kategori berasal dari `public.mod_category_counts`. Trigger database memperbarui hitungan langsung saat mod dipublikasikan, diubah kategori/status publikasinya, atau dihapus; `pg_cron` menjalankan rekonsiliasi lengkap setiap 30 menit. Perubahan langsung tampil melalui Realtime, dengan pembacaan ulang berkala sebagai cadangan.
 - Unggahan langsung dipublikasikan setelah metadata tersimpan. Tidak ada moderasi maupun pemindaian malware server-side. File executable tetap berisiko walaupun situs hanya mengemasnya ke ZIP.
 - Kunci publishable tidak memberi hak admin; akses dikendalikan oleh RLS. Jangan menonaktifkan kebijakan RLS untuk mengatasi error.
 

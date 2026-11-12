@@ -259,7 +259,7 @@ async function refreshCategoryCounts() {
   }
   categoryCounts = counts;
   categoryCountStatus.textContent = analyzedAt
-    ? `Jumlah mod dianalisis Supabase: ${new Date(analyzedAt).toLocaleString("id-ID")}. Pembaruan otomatis setiap 30 menit.`
+    ? `Analisis terakhir: ${new Date(analyzedAt).toLocaleString("id-ID")}. Jumlah diperbarui saat katalog berubah dan diperiksa ulang setiap 30 menit.`
     : "Menunggu analisis jumlah mod pertama dari Supabase.";
   renderFilters();
 }
@@ -1065,6 +1065,7 @@ async function initialize() {
     .channel("ruangmod-public-mods")
     .on("postgres_changes", { event: "*", schema: "public", table: "mods" }, () => {
       refreshCommunityMods().catch(showCatalogError);
+      refreshCategoryCounts().catch(showCategoryCountError);
     })
     .subscribe((status, error) => {
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {

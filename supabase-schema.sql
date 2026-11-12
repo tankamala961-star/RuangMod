@@ -77,6 +77,69 @@ as $$
 $$;
 
 revoke all on function public.refresh_mod_category_counts() from public, anon, authenticated;
+
+create or replace function public.refresh_mod_category_count(p_category text)
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  insert into public.mod_category_counts (category, mod_count, analyzed_at)
+  select p_category, count(mods.id), now()
+  from public.mods as mods
+  where mods.category = p_category
+    and mods.is_published
+  on conflict (category) do update
+    set mod_count = excluded.mod_count,
+        analyzed_at = excluded.analyzed_at;
+$$;
+
+revoke all on function public.refresh_mod_category_count(text) from public, anon, authenticated;
+
+create or replace function public.update_mod_category_counts_after_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  affected_category text;
+begin
+  if tg_op = 'INSERT' then
+    if new.is_published then
+      perform public.refresh_mod_category_count(new.category);
+    end if;
+    return new;
+  elsif tg_op = 'DELETE' then
+    if old.is_published then
+      perform public.refresh_mod_category_count(old.category);
+    end if;
+    return old;
+  end if;
+
+  for affected_category in
+    select distinct changed.category
+    from (values
+      (case when old.is_published then old.category end),
+      (case when new.is_published then new.category end)
+    ) as changed(category)
+    where changed.category is not null
+  loop
+    perform public.refresh_mod_category_count(affected_category);
+  end loop;
+
+  return new;
+end
+$$;
+
+revoke all on function public.update_mod_category_counts_after_change() from public, anon, authenticated;
+
+drop trigger if exists refresh_mod_category_counts_after_change on public.mods;
+create trigger refresh_mod_category_counts_after_change
+  after insert or update or delete on public.mods
+  for each row
+  execute function public.update_mod_category_counts_after_change();
+
 select public.refresh_mod_category_counts();
 
 create extension if not exists pg_cron;
