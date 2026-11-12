@@ -1,86 +1,3 @@
-const initialMods = [
-  {
-    id: "visual-essentials",
-    name: "Visual Essentials",
-    category: "Visual",
-    description: "Preset visual ringan untuk memberi suasana berbeda tanpa mengubah gameplay.",
-    version: "v1.2",
-    size: "18 MB",
-    symbol: "V",
-    downloadUrl: ""
-  },
-  {
-    id: "hud-clean",
-    name: "HUD Clean Pack",
-    category: "UI",
-    description: "Kumpulan elemen HUD minimalis agar tampilan layar terasa lebih rapi.",
-    version: "v2.0",
-    size: "4 MB",
-    symbol: "⌗",
-    downloadUrl: ""
-  },
-  {
-    id: "handling-tools",
-    name: "Handling Toolkit",
-    category: "Tools",
-    description: "Utilities komunitas untuk membantu mengatur dan menguji handling kendaraan.",
-    version: "v1.0",
-    size: "2 MB",
-    symbol: "⌁",
-    downloadUrl: ""
-  },
-  {
-    id: "vehicle-pack",
-    name: "Vehicle Pack SA-MP",
-    category: "Vehicle",
-    description: "Koleksi kendaraan kustom untuk memperbarui tampilan kendaraan di SA-MP. Baca petunjuk pemasangan dan pastikan kompatibel dengan server yang digunakan.",
-    version: "v1.0",
-    size: "Belum tersedia",
-    symbol: "V",
-    downloadUrl: ""
-  },
-  {
-    id: "street-audio",
-    name: "Street Audio Pack",
-    category: "Audio",
-    description: "Koleksi audio bertema jalanan untuk pengalaman bermain yang lebih imersif.",
-    version: "v1.4",
-    size: "32 MB",
-    symbol: "♫",
-    downloadUrl: ""
-  },
-  {
-    id: "samp-voice-pack",
-    name: "SA-MP Voice Pack",
-    category: "Voice pack",
-    description: "Paket suara komunitas untuk menambah variasi audio saat bermain SA-MP. Baca petunjuk pemasangan dan pastikan kompatibel dengan client yang digunakan.",
-    version: "v1.0",
-    size: "Belum tersedia",
-    symbol: "🎙",
-    downloadUrl: ""
-  },
-  {
-    id: "map-markers",
-    name: "Map Marker Set",
-    category: "UI",
-    description: "Set ikon marker peta dengan gaya sederhana dan mudah dibedakan.",
-    version: "v1.1",
-    size: "6 MB",
-    symbol: "⌖",
-    downloadUrl: ""
-  },
-  {
-    id: "performance-notes",
-    name: "Performance Notes",
-    category: "Tools",
-    description: "Panduan komunitas berisi checklist pengaturan untuk membantu optimasi client.",
-    version: "v1.0",
-    size: "1 MB",
-    symbol: "↗",
-    downloadUrl: ""
-  }
-];
-
 const fileSignatures = {
   png: [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
   jpg: [[0xff, 0xd8, 0xff]],
@@ -95,19 +12,21 @@ const riskyFileExtensions = new Set([
   "rar", "7z"
 ]);
 const palettes = {
-  Visual: ["#2b3123", "#d0f66d", "V"],
-  UI: ["#252d32", "#a9d9e5", "⌗"],
-  Tools: ["#332a22", "#f4b77a", "⌁"],
-  Audio: ["#32252c", "#efa8c5", "♫"],
-  "Voice pack": ["#30252d", "#e7a5d2", "🎙"],
-  Vehicle: ["#292d24", "#c5e777", "V"],
-  Gameplay: ["#30272b", "#f1a6a6", "G"],
+  UI: ["#252d32", "#a9d9e5", "▦", "Tampilan dan HUD"],
+  Gameplay: ["#30272b", "#f1a6a6", "🎮", "Fitur permainan"],
+  Vehicles: ["#292d24", "#c5e777", "🚗", "Kendaraan dan handling"],
+  "Voice pack": ["#30252d", "#e7a5d2", "🎙", "Suara dan voice pack"],
+  Tools: ["#332a22", "#f4b77a", "🔧", "Tools dan utilitas"],
+  Audio: ["#32252c", "#efa8c5", "♫", "Musik dan efek suara"],
+  Visual: ["#2b3123", "#d0f66d", "✦", "Grafis dan lingkungan"]
 };
-const collectionGrid = document.querySelector("#collection-grid");
 const grid = document.querySelector("#mod-grid");
 const filters = document.querySelector("#category-filters");
+const categoryCountStatus = document.querySelector("#category-count-status");
 const searchInput = document.querySelector("#search-input");
 const resultsCount = document.querySelector("#results-count");
+const catalogStatus = document.querySelector("#catalog-status");
+const catalogRetryButton = document.querySelector("#catalog-retry");
 const emptyState = document.querySelector("#empty-state");
 const emptyStateIcon = document.querySelector("#empty-state-icon");
 const emptyStateTitle = document.querySelector("#empty-state-title");
@@ -134,19 +53,28 @@ const signInButton = document.querySelector("#sign-in-button");
 const signUpButton = document.querySelector("#sign-up-button");
 const signOutButton = document.querySelector("#sign-out-button");
 const googleSignInButton = document.querySelector("#google-sign-in-button");
-let mods = [...initialMods];
+let mods = [];
 let activeCategory = "Semua";
 let analyzedFolder = null;
 let previewSelectionUrl = "";
 let storageReady = false;
+let catalogRequestId = 0;
+let categoryCountRequestId = 0;
+let categoryCounts = null;
+let backendSetupMessage = "Supabase belum siap. Periksa konfigurasi Supabase.";
 let currentUser = null;
 let supabaseClient;
 const previewUrls = new Map();
+const previewSignedUrls = new Map();
 const maxUploadBytes = 100 * 1024 * 1024;
+const pendingDownloadKey = "ruangmod.pendingGoogleDownload";
+const previewUrlLifetimeSeconds = 3600;
 const supabaseConfig = window.RUANGMOD_SUPABASE;
 
 function updateAuthInterface() {
   const signedIn = Boolean(currentUser);
+  const canPublish = Boolean(storageReady && currentUser && analyzedFolder
+    && (!analyzedFolder.riskyFiles.length || trustedCodeInput.checked));
   authEmail.disabled = signedIn;
   authPassword.disabled = signedIn;
   signInButton.hidden = signedIn;
@@ -154,8 +82,7 @@ function updateAuthInterface() {
   signOutButton.hidden = !signedIn;
   googleSignInButton.hidden = signedIn;
   authStatus.textContent = signedIn ? "Akun aktif." : "Masuk atau daftar untuk mengunggah mod.";
-  publishButton.disabled = !storageReady || !currentUser || !analyzedFolder
-    || (analyzedFolder.riskyFiles.length > 0 && !trustedCodeInput.checked);
+  publishButton.disabled = !canPublish;
 }
 
 function addCommunityMod(mod) {
@@ -164,9 +91,24 @@ function addCommunityMod(mod) {
   renderMods();
 }
 
-function toCommunityMod(row) {
+async function toCommunityMod(row) {
   const bucket = supabaseClient.storage.from(supabaseConfig.bucket);
   const [background, color, symbol] = palettes[row.category] || palettes.Gameplay;
+  let preview = "";
+  if (row.preview_path) {
+    const cached = previewSignedUrls.get(row.preview_path);
+    if (cached && cached.expiresAt > Date.now() + 60_000) {
+      preview = cached.url;
+    } else {
+      const { data, error } = await bucket.createSignedUrl(row.preview_path, previewUrlLifetimeSeconds);
+      if (error) throw error;
+      preview = data.signedUrl;
+      previewSignedUrls.set(row.preview_path, {
+        url: preview,
+        expiresAt: Date.now() + previewUrlLifetimeSeconds * 1000
+      });
+    }
+  }
   return {
     id: row.id,
     name: row.name,
@@ -180,27 +122,61 @@ function toCommunityMod(row) {
     color,
     sha256: row.sha256,
     archivePath: row.archive_path,
-    downloadUrl: bucket.getPublicUrl(row.archive_path).data.publicUrl,
-    preview: row.preview_path ? bucket.getPublicUrl(row.preview_path).data.publicUrl : "",
+    preview,
     createdAt: row.created_at
   };
 }
 
 async function refreshCommunityMods() {
-  const { data, error } = await supabaseClient
-    .from("mods")
-    .select("id,name,author,category,description,version,size_bytes,sha256,archive_path,preview_path,created_at")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  const communityMods = data.map(toCommunityMod);
-  const initialIds = new Set(initialMods.map((mod) => mod.id));
-  mods = [...initialMods, ...communityMods.filter((mod) => !initialIds.has(mod.id))];
+  const requestId = ++catalogRequestId;
+  const pageSize = 500;
+  const rows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabaseClient
+      .from("mods")
+      .select("id,name,author,category,description,version,size_bytes,sha256,archive_path,preview_path,created_at")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < pageSize) break;
+  }
+  if (requestId !== catalogRequestId) return;
+  const loadedMods = await Promise.all(rows.map(toCommunityMod));
+  if (requestId !== catalogRequestId) return;
+  mods = loadedMods;
   renderFilters();
   renderMods();
+  catalogStatus.hidden = true;
+  catalogRetryButton.hidden = true;
+  restorePendingDownload();
+}
+
+function showCatalogError(error) {
+  const message = getBackendSetupMessage(error);
+  backendSetupMessage = message;
+  catalogStatus.textContent = `Katalog gagal dimuat: ${message}`;
+  catalogStatus.hidden = false;
+  catalogRetryButton.hidden = false;
+  authStatus.textContent = message;
 }
 
 function getErrorMessage(error) {
   return error?.message || "Terjadi kesalahan yang tidak diketahui.";
+}
+
+function getBackendSetupMessage(error) {
+  if (error?.code === "PGRST205" || error?.message?.includes("Could not find the table 'public.mods'")) {
+    return "Tabel public.mods belum ada di Supabase. Buka SUPABASE_SETUP.md, jalankan seluruh supabase-schema.sql di Supabase Dashboard → SQL Editor, lalu muat ulang halaman.";
+  }
+  if (error?.code === "42501" || error?.message?.toLowerCase().includes("permission denied")) {
+    return "Supabase menolak akses database. Periksa grant dan kebijakan RLS pada supabase-schema.sql.";
+  }
+  if (error?.message?.toLowerCase().includes("failed to fetch")) {
+    return "Supabase tidak dapat dijangkau. Periksa koneksi internet, URL/key project, dan pengaturan CSP.";
+  }
+  return `Koneksi Supabase gagal: ${getErrorMessage(error)} Periksa supabase-schema.sql dan SUPABASE_SETUP.md.`;
 }
 
 function escapeHtml(value) {
@@ -221,18 +197,75 @@ function sanitizeUserText(value) {
 }
 
 function formatSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function renderFilters() {
-  const categories = ["Semua", ...Object.keys(palettes)];
-  if (!categories.includes(activeCategory)) activeCategory = "Semua";
-  filters.innerHTML = categories.map((category) => `
-    <button class="filter-button" type="button" data-category="${escapeHtml(category)}" aria-pressed="${category === activeCategory}">
-      ${escapeHtml(category)}
+  const categories = Object.keys(palettes);
+  if (activeCategory !== "Semua" && !categories.includes(activeCategory)) activeCategory = "Semua";
+  const displayedCounts = categoryCounts || new Map(categories.map((category) => [category, 0]));
+  if (!categoryCounts) {
+    for (const mod of mods) {
+      if (displayedCounts.has(mod.category)) {
+        displayedCounts.set(mod.category, displayedCounts.get(mod.category) + 1);
+      }
+    }
+  }
+  const formatCount = (count) => new Intl.NumberFormat("id-ID").format(count);
+  const totalCount = [...displayedCounts.values()].reduce((total, count) => total + count, 0);
+  filters.innerHTML = `
+    <button class="filter-all" type="button" data-category="Semua" aria-pressed="${activeCategory === "Semua"}">
+      Semua kategori <span>${formatCount(totalCount)} mod</span>
     </button>
-  `).join("");
+    <div class="category-grid">
+      ${categories.map((category) => {
+        const [background, color, symbol, description] = palettes[category];
+        const count = displayedCounts.get(category);
+        return `
+          <button class="category-card" type="button" data-category="${escapeHtml(category)}" aria-pressed="${category === activeCategory}">
+            <span class="category-card-art" style="--card-bg:${background};--card-color:${color}" aria-hidden="true">
+              <span>${escapeHtml(symbol)}</span>
+            </span>
+            <span class="category-card-title">${escapeHtml(category)}</span>
+            <span class="category-card-description">${escapeHtml(description)}</span>
+            <span class="category-card-count">${formatCount(count)} mod</span>
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+async function refreshCategoryCounts() {
+  if (!supabaseClient) return;
+  const requestId = ++categoryCountRequestId;
+  const { data, error } = await supabaseClient
+    .from("mod_category_counts")
+    .select("category,mod_count,analyzed_at");
+  if (error) throw error;
+  if (requestId !== categoryCountRequestId) return;
+
+  const counts = new Map(Object.keys(palettes).map((category) => [category, 0]));
+  let analyzedAt = null;
+  for (const row of data) {
+    const count = Number(row.mod_count);
+    if (!counts.has(row.category) || !Number.isSafeInteger(count) || count < 0) {
+      throw new Error("Ringkasan jumlah mod dari Supabase memiliki data yang tidak valid.");
+    }
+    counts.set(row.category, count);
+    if (!analyzedAt || Date.parse(row.analyzed_at) > Date.parse(analyzedAt)) analyzedAt = row.analyzed_at;
+  }
+  categoryCounts = counts;
+  categoryCountStatus.textContent = analyzedAt
+    ? `Jumlah mod dianalisis Supabase: ${new Date(analyzedAt).toLocaleString("id-ID")}. Pembaruan otomatis setiap 30 menit.`
+    : "Menunggu analisis jumlah mod pertama dari Supabase.";
+  renderFilters();
+}
+
+function showCategoryCountError(error) {
+  categoryCountStatus.textContent = `Analisis jumlah mod belum tersedia: ${getErrorMessage(error)}. Jalankan supabase-schema.sql di Dashboard Supabase.`;
 }
 
 function getPreviewUrl(mod) {
@@ -248,45 +281,6 @@ function getPreviewUrl(mod) {
 
 function renderMods() {
   const query = searchInput.value.trim().toLocaleLowerCase("id");
-  if (activeCategory === "Semua" && !query) {
-    const visibleCategories = Object.keys(palettes).filter((category) => category.toLocaleLowerCase("id").includes(query));
-    collectionGrid.innerHTML = visibleCategories.map((category) => {
-      const [background, color, symbol] = palettes[category];
-      const modCount = mods.filter((mod) => mod.category === category).length;
-      return `
-        <article class="mod-card collection-card">
-          <div class="card-art" style="--card-bg:${background};--card-color:${color}">
-            <span class="card-symbol" aria-hidden="true">${escapeHtml(symbol)}</span>
-          </div>
-          <div class="card-body">
-            <div class="card-topline">
-              <span class="category-tag">KOLEKSI MOD</span>
-              <span class="folder-tag">${modCount} MOD</span>
-            </div>
-            <h3>${escapeHtml(category)}</h3>
-            <p>Kumpulan mod kategori ${escapeHtml(category)}.</p>
-            <div class="card-actions">
-              <button class="details-button" type="button" data-open-category="${escapeHtml(category)}">Buka koleksi ↗</button>
-            </div>
-          </div>
-        </article>
-      `;
-    }).join("");
-    grid.innerHTML = "";
-
-    resultsCount.textContent = `${visibleCategories.length} KOLEKSI DITEMUKAN`;
-    emptyState.hidden = visibleCategories.length > 0;
-    collectionGrid.hidden = visibleCategories.length === 0;
-    grid.hidden = true;
-    emptyStateIcon.textContent = "⌕";
-    emptyStateTitle.textContent = "Koleksi tidak ditemukan.";
-    emptyStateDescription.textContent = "Coba kata kunci koleksi lain.";
-    createFirstModButton.hidden = true;
-    return;
-  }
-
-  collectionGrid.innerHTML = "";
-  collectionGrid.hidden = true;
   const visibleMods = mods.filter((mod) => {
     const matchesCategory = activeCategory === "Semua" || mod.category === activeCategory;
     const searchableText = `${mod.name} ${mod.category} ${mod.description} ${mod.author || ""}`.toLocaleLowerCase("id");
@@ -322,13 +316,13 @@ function renderMods() {
   resultsCount.textContent = `${visibleMods.length} MOD DITEMUKAN`;
   emptyState.hidden = visibleMods.length > 0;
   grid.hidden = visibleMods.length === 0;
-  const isEmptyArchive = visibleMods.length === 0 && !query && activeCategory !== "Semua";
+  const isEmptyArchive = visibleMods.length === 0 && !query;
   emptyStateIcon.textContent = isEmptyArchive ? "＋" : "⌕";
   emptyStateTitle.textContent = isEmptyArchive
-    ? `Belum ada mod di arsip ${activeCategory}.`
+    ? activeCategory === "Semua" ? "Belum ada mod di katalog." : `Belum ada mod di arsip ${activeCategory}.`
     : "Belum ada mod yang cocok.";
   emptyStateDescription.textContent = isEmptyArchive
-    ? "Jadilah yang pertama membagikan mod ke arsip ini."
+    ? "Jadilah yang pertama membagikan mod ke katalog komunitas."
     : "Coba kata kunci atau kategori lain.";
   createFirstModButton.hidden = !isEmptyArchive;
 }
@@ -354,25 +348,94 @@ function showDetails(mod) {
   const downloadLink = document.querySelector("#dialog-download");
   const downloadNote = document.querySelector("#dialog-download-note");
   const unavailableNote = document.querySelector("#dialog-unavailable");
-  const safeDownloadUrl = getSafeDownloadUrl(mod.downloadUrl);
-  downloadLink.hidden = !safeDownloadUrl;
-  unavailableNote.hidden = Boolean(safeDownloadUrl);
+  downloadLink.hidden = !mod.archivePath;
+  unavailableNote.hidden = Boolean(mod.archivePath);
   downloadNote.hidden = !mod.archivePath;
-  downloadLink.href = safeDownloadUrl || "#";
-  if (safeDownloadUrl) downloadLink.setAttribute("download", "");
-  else downloadLink.removeAttribute("download");
+  downloadLink.href = "#";
+  downloadLink.dataset.modId = mod.id;
+  downloadLink.removeAttribute("download");
+  document.querySelector("#dialog-download-status").textContent = "";
   dialog.showModal();
 }
 
-function getSafeDownloadUrl(value) {
-  if (typeof value !== "string" || !value.trim()) return "";
+function isGoogleUser(user = currentUser) {
+  return user?.app_metadata?.provider === "google";
+}
+
+function restorePendingDownload() {
+  const modId = sessionStorage.getItem(pendingDownloadKey);
+  if (!modId) return;
+  if (currentUser && !isGoogleUser()) {
+    sessionStorage.removeItem(pendingDownloadKey);
+    return;
+  }
+  if (!isGoogleUser()) return;
+  const mod = mods.find((item) => item.id === modId);
+  if (!mod) return;
+  const downloadButton = document.querySelector("#dialog-download");
+  if (!dialog.open || downloadButton.dataset.modId !== mod.id) showDetails(mod);
+  document.querySelector("#dialog-download-status").textContent =
+    "Login Google berhasil. Klik tombol Unduh mod untuk melanjutkan.";
+}
+
+async function downloadArchive(mod) {
+  if (!isGoogleUser()) {
+    await requireGoogleForDownload(mod);
+    return;
+  }
+  const downloadStatus = document.querySelector("#dialog-download-status");
+  const downloadButton = document.querySelector("#dialog-download");
+  downloadButton.setAttribute("aria-disabled", "true");
+  downloadStatus.textContent = "Memeriksa akses Google dan menyiapkan unduhan...";
   try {
-    const url = new URL(value);
-    const trustedOrigin = new URL(supabaseConfig.url).origin;
-    if (url.username || url.password || url.origin !== trustedOrigin || url.protocol !== "https:") return "";
-    return url.href;
-  } catch {
-    return "";
+    const { data, error } = await supabaseClient.storage
+      .from(supabaseConfig.bucket)
+      .download(mod.archivePath);
+    if (error) throw error;
+
+    const objectUrl = URL.createObjectURL(data);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `${sanitizeFilename(mod.name)}.zip`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    sessionStorage.removeItem(pendingDownloadKey);
+    downloadStatus.textContent = "Unduhan dimulai.";
+  } catch (error) {
+    downloadStatus.textContent = `Unduhan gagal: ${getErrorMessage(error)}`;
+  } finally {
+    downloadButton.removeAttribute("aria-disabled");
+  }
+}
+
+async function requireGoogleForDownload(mod) {
+  sessionStorage.setItem(pendingDownloadKey, mod.id);
+  document.querySelector("#dialog-download-status").textContent =
+    "Untuk mengunduh mod, silakan masuk dengan akun Google.";
+  const downloadButton = document.querySelector("#dialog-download");
+  downloadButton.setAttribute("aria-disabled", "true");
+  try {
+    if (currentUser) {
+      const { error: signOutError } = await supabaseClient.auth.signOut({ scope: "local" });
+      if (signOutError) throw signOutError;
+      currentUser = null;
+      updateAuthInterface();
+    }
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${location.origin}${location.pathname}`,
+        queryParams: { prompt: "select_account" }
+      }
+    });
+    if (error) throw error;
+  } catch (error) {
+    sessionStorage.removeItem(pendingDownloadKey);
+    document.querySelector("#dialog-download-status").textContent =
+      `Login Google gagal: ${getErrorMessage(error)}`;
+    downloadButton.removeAttribute("aria-disabled");
   }
 }
 
@@ -431,6 +494,12 @@ function getRelativePath(file) {
 async function analyzeFolder(fileList, previewFile) {
   const files = Array.from(fileList);
   if (files.length === 0) throw new Error("Pilih folder yang berisi file mod terlebih dahulu.");
+  if (files.some((file) => {
+    const rawPath = (file.webkitRelativePath || file.name).replace(/\\/g, "/");
+    return rawPath.startsWith("/") || /^[a-z]:/i.test(rawPath) || (!file.webkitRelativePath && !rawPath.includes("/"));
+  })) {
+    throw new Error("Pilih folder mod, bukan file tunggal atau berkas yang bukan folder yang dipilih dari browser.");
+  }
   if (!crypto.subtle) throw new Error("Browser ini tidak mendukung analisis SHA-256. Buka situs melalui koneksi aman (HTTPS).");
   await validatePreview(previewFile);
 
@@ -494,7 +563,8 @@ function showAnalysis(folder) {
   analysisPanel.hidden = false;
   trustedCodeInput.checked = false;
   codeAcknowledgement.hidden = folder.riskyFiles.length === 0;
-  publishButton.disabled = !storageReady || !currentUser || folder.riskyFiles.length > 0;
+  publishButton.disabled = !storageReady || !currentUser || (folder.riskyFiles.length > 0 && !trustedCodeInput.checked);
+  updateAuthInterface();
 }
 
 function showAnalysisError(message) {
@@ -624,13 +694,16 @@ createFirstModButton.addEventListener("click", () => {
   uploadForm.elements.namedItem("name").focus({ preventScroll: true });
 });
 
-collectionGrid.addEventListener("click", (event) => {
-  const categoryButton = event.target.closest("[data-open-category]");
-  if (categoryButton) {
-    activeCategory = categoryButton.dataset.openCategory;
-    searchInput.value = "";
-    renderFilters();
-    renderMods();
+catalogRetryButton.addEventListener("click", async () => {
+  catalogRetryButton.disabled = true;
+  catalogStatus.textContent = "Memuat ulang katalog...";
+  catalogStatus.hidden = false;
+  try {
+    await refreshCommunityMods();
+  } catch (error) {
+    showCatalogError(error);
+  } finally {
+    catalogRetryButton.disabled = false;
   }
 });
 
@@ -641,9 +714,25 @@ grid.addEventListener("click", (event) => {
   if (mod) showDetails(mod);
 });
 
-document.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
+function closeDialog() {
+  sessionStorage.removeItem(pendingDownloadKey);
+  if (dialog.open) dialog.close();
+}
+
+document.querySelector(".dialog-close").addEventListener("click", closeDialog);
+dialog.addEventListener("cancel", closeDialog);
+document.querySelector("#dialog-download").addEventListener("click", async (event) => {
+  event.preventDefault();
+  const mod = mods.find((item) => item.id === event.currentTarget.dataset.modId);
+  if (!mod?.archivePath || event.currentTarget.getAttribute("aria-disabled") === "true") return;
+  if (!isGoogleUser()) {
+    await requireGoogleForDownload(mod);
+    return;
+  }
+  await downloadArchive(mod);
+});
 dialog.addEventListener("click", (event) => {
-  if (event.target === dialog) dialog.close();
+  if (event.target === dialog) closeDialog();
 });
 
 folderInput.addEventListener("change", () => {
@@ -783,11 +872,11 @@ analyzeButton.addEventListener("click", async () => {
     if (duplicate) throw new Error("Folder dengan isi yang sama sudah ada di katalog browser ini.");
     analyzedFolder = result;
     showAnalysis(result);
-    if (!storageReady) uploadStatus.textContent = "Supabase belum siap; mod belum bisa diunggah.";
+    if (!storageReady) uploadStatus.textContent = backendSetupMessage;
   } catch (error) {
     showAnalysisError(error.message);
   } finally {
-    analyzeButton.disabled = false;
+    analyzeButton.disabled = !storageReady;
     analyzeButton.textContent = "Analisis folder";
   }
 });
@@ -881,7 +970,7 @@ uploadForm.addEventListener("submit", async (event) => {
     if (insertError) throw insertError;
     metadataSaved = true;
 
-    addCommunityMod(toCommunityMod(data));
+    addCommunityMod(await toCommunityMod(data));
     activeCategory = category;
     searchInput.value = "";
     renderFilters();
@@ -924,46 +1013,77 @@ document.addEventListener("keydown", (event) => {
 
 async function initialize() {
   renderFilters();
-  renderMods();
+  catalogStatus.hidden = false;
+  catalogStatus.textContent = "Memuat mod terbaru dari Supabase...";
+  catalogRetryButton.hidden = true;
   try {
     if (!supabaseConfig?.url || !supabaseConfig?.publishableKey || !window.supabase?.createClient) {
       throw new Error("Konfigurasi Supabase atau pustaka klien tidak ditemukan.");
     }
     supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.publishableKey);
+  } catch (error) {
+    updateAuthInterface();
+    showCatalogError(error);
+    uploadStatus.textContent = backendSetupMessage;
+    analyzeButton.disabled = true;
+    chooseFolderButton.disabled = true;
+    folderInput.disabled = true;
+    previewInput.disabled = true;
+    publishButton.disabled = true;
+    return;
+  }
+
+  refreshCommunityMods().catch(showCatalogError);
+  refreshCategoryCounts().catch(showCategoryCountError);
+
+  try {
     const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
     if (sessionError) throw sessionError;
     currentUser = sessionData.session?.user || null;
     updateAuthInterface();
+    restorePendingDownload();
     supabaseClient.auth.onAuthStateChange((event, session) => {
       currentUser = session?.user || null;
       updateAuthInterface();
+      restorePendingDownload();
     });
-    await refreshCommunityMods();
     storageReady = true;
+    analyzeButton.disabled = false;
     updateAuthInterface();
-    supabaseClient
-      .channel("ruangmod-public-mods")
-      .on("postgres_changes", { event: "*", schema: "public", table: "mods" }, () => {
-        refreshCommunityMods().catch((error) => {
-          authStatus.textContent = `Pembaruan koleksi gagal: ${getErrorMessage(error)}`;
-        });
-      })
-      .subscribe((status, error) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          authStatus.textContent = `Pembaruan langsung tidak tersedia: ${getErrorMessage(error)}`;
-        }
-      });
-    window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      refreshCommunityMods().catch((error) => {
-        authStatus.textContent = `Pembaruan koleksi gagal: ${getErrorMessage(error)}`;
-      });
-    }, 30_000);
   } catch (error) {
-    updateAuthInterface();
-    authStatus.textContent = `Koneksi Supabase gagal: ${getErrorMessage(error)}`;
-    uploadStatus.textContent = "Periksa setup Supabase dan jalankan SQL pada file SUPABASE_SETUP.md.";
+    const message = `Koneksi akun gagal: ${getErrorMessage(error)}`;
+    authStatus.textContent = message;
+    uploadStatus.textContent = message;
+    analyzeButton.disabled = true;
+    chooseFolderButton.disabled = true;
+    folderInput.disabled = true;
+    previewInput.disabled = true;
+    publishButton.disabled = true;
   }
+
+  supabaseClient
+    .channel("ruangmod-public-mods")
+    .on("postgres_changes", { event: "*", schema: "public", table: "mods" }, () => {
+      refreshCommunityMods().catch(showCatalogError);
+    })
+    .subscribe((status, error) => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        authStatus.textContent = `Pembaruan langsung tidak tersedia: ${getErrorMessage(error)}`;
+      }
+    });
+  window.setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    refreshCommunityMods().catch(showCatalogError);
+  }, 30_000);
+  window.setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    refreshCategoryCounts().catch(showCategoryCountError);
+  }, 30 * 60_000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    refreshCommunityMods().catch(showCatalogError);
+    refreshCategoryCounts().catch(showCategoryCountError);
+  });
 }
 
 initialize();

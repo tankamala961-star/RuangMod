@@ -68,10 +68,16 @@
             <kbd>/</kbd>
           </label>
           <div id="category-filters" class="filters" aria-label="Filter kategori"></div>
+          <p id="category-count-status" class="category-count-status" role="status" aria-live="polite">
+            Menunggu analisis jumlah mod dari Supabase...
+          </p>
         </div>
 
+        <div class="catalog-feedback">
+          <p id="catalog-status" class="catalog-status" role="status" aria-live="polite">Memuat mod terbaru dari Supabase...</p>
+          <button id="catalog-retry" class="catalog-retry" type="button" hidden>Coba muat ulang</button>
+        </div>
         <p id="results-count" class="results-count" aria-live="polite"></p>
-        <div id="collection-grid" class="mod-grid collection-grid" hidden></div>
         <div id="mod-grid" class="mod-grid"></div>
         <div id="empty-state" class="empty-state" hidden>
           <span id="empty-state-icon" class="empty-state-icon" aria-hidden="true">⌕</span>
@@ -92,7 +98,7 @@
           <p class="collection-note">Periksa berkas sebelum menambahkannya ke katalog.</p>
         </div>
 
-        <p class="storage-notice">Mod yang diterbitkan tersimpan di Supabase dan terlihat oleh semua pengunjung. Akun diperlukan untuk mengunggah. Pemeriksaan berkas bukan antivirus; unduh hanya dari sumber yang dipercaya.</p>
+        <p class="storage-notice">Katalog dapat dilihat tanpa login. Untuk mengunduh mod, wajib masuk dengan akun Google. Akun diperlukan untuk mengunggah mod. Pemeriksaan berkas bukan antivirus; unduh hanya dari sumber yang dipercaya.</p>
         <section class="auth-panel" aria-labelledby="account-title">
           <div class="auth-heading">
             <h3 id="account-title">Akun komunitas</h3>
@@ -132,13 +138,13 @@
             <label class="form-field">
               <span>Kategori</span>
               <select name="category" required>
-                <option value="Visual">Visual</option>
                 <option value="UI">UI</option>
+                <option value="Gameplay">Gameplay</option>
+                <option value="Vehicles">Vehicles</option>
+                <option value="Voice pack">Voice pack</option>
                 <option value="Tools">Tools</option>
                 <option value="Audio">Audio</option>
-                <option value="Voice pack">Voice pack</option>
-                <option value="Vehicle">Vehicle</option>
-                <option value="Gameplay">Gameplay</option>
+                <option value="Visual">Visual</option>
               </select>
             </label>
             <label class="form-field">
@@ -170,7 +176,7 @@
           </div>
           <div class="analysis-panel" id="analysis-result" aria-live="polite" hidden></div>
           <div class="upload-actions">
-            <button class="secondary-button" id="analyze-button" type="button">Analisis folder</button>
+            <button class="secondary-button" id="analyze-button" type="button" disabled>Analisis folder</button>
             <button class="primary-button" id="publish-button" type="submit" disabled>Tambahkan ke katalog <span aria-hidden="true">↑</span></button>
           </div>
           <p id="upload-status" class="upload-status" role="status" aria-live="polite"></p>
@@ -208,9 +214,10 @@
         <span id="dialog-version"></span>
         <span id="dialog-author" hidden></span>
       </div>
-      <p id="dialog-download-note" class="download-note" hidden>Folder mod akan diunduh sebagai file ZIP setelah tombol di bawah ditekan.</p>
+      <p id="dialog-download-note" class="download-note" hidden>Login dengan akun Google diperlukan untuk mengunduh file ZIP.</p>
       <p id="dialog-unavailable" class="download-note" hidden>Tautan unduhan belum tersedia atau tidak aman.</p>
       <a id="dialog-download" class="primary-button dialog-download" href="#">Unduh mod <span aria-hidden="true">↓</span></a>
+      <p id="dialog-download-status" class="download-status" role="status" aria-live="polite"></p>
     </dialog>
   </body>
 </html>
