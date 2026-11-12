@@ -224,14 +224,15 @@ function renderFilters() {
         const [background, color, symbol, description] = palettes[category];
         const count = displayedCounts.get(category);
         return `
-          <button class="category-card" type="button" data-category="${escapeHtml(category)}" aria-pressed="${category === activeCategory}">
+          <article class="category-card${category === activeCategory ? " category-card-active" : ""}">
             <span class="category-card-art" style="--card-bg:${background};--card-color:${color}" aria-hidden="true">
               <span>${escapeHtml(symbol)}</span>
             </span>
             <span class="category-card-title">${escapeHtml(category)}</span>
             <span class="category-card-description">${escapeHtml(description)}</span>
             <span class="category-card-count">${formatCount(count)} mod</span>
-          </button>
+            <button class="category-card-open" type="button" data-category="${escapeHtml(category)}" aria-pressed="${category === activeCategory}">BUKA</button>
+          </article>
         `;
       }).join("")}
     </div>
