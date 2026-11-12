@@ -961,10 +961,11 @@ uploadForm.addEventListener("submit", async (event) => {
     if (insertError) throw insertError;
     metadataSaved = true;
 
-    addCommunityMod(await toCommunityMod(data));
+    const savedMod = await toCommunityMod(data);
+    catalogRequestId += 1;
     activeCategory = category;
     searchInput.value = "";
-    renderMods();
+    addCommunityMod(savedMod);
     uploadForm.reset();
     analyzedFolder = null;
     folderSelection.textContent = "Belum ada folder yang dipilih.";
