@@ -59,7 +59,7 @@ let currentUser = null;
 let supabaseClient;
 const previewUrls = new Map();
 const previewSignedUrls = new Map();
-const maxUploadBytes = 100 * 1024 * 1024;
+const maxUploadBytes = 5 * 1024 * 1024 * 1024;
 const pendingDownloadKey = "ruangmod.pendingGoogleDownload";
 const previewUrlLifetimeSeconds = 3600;
 const supabaseConfig = window.RUANGMOD_SUPABASE;
@@ -190,6 +190,7 @@ function sanitizeUserText(value) {
 function formatSize(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -588,7 +589,7 @@ function createZipHeader(signature, byteLength) {
 }
 
 async function createZip(files, rootFolder) {
-  if (files.length > 0xffff) throw new Error("Folder berisi terlalu banyak file untuk format ZIP standar.");
+  if (files.length > 0xffff) throw new Error("Folder berisi terlalu banyak file untuk format ZIP.");
   if (typeof CompressionStream === "undefined") throw new Error("Browser ini tidak mendukung pembuatan ZIP. Coba browser versi terbaru.");
 
   const encoder = new TextEncoder();
@@ -596,14 +597,12 @@ async function createZip(files, rootFolder) {
   const localParts = [];
   const centralParts = [];
   let localOffset = 0;
+  let zip64Required = false;
   const now = new Date();
   const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
   const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
 
   for (const entry of files) {
-    if (entry.file.size > 0xffffffff || localOffset > 0xffffffff) {
-      throw new Error("Folder terlalu besar untuk format ZIP standar di browser ini.");
-    }
     const archivePath = `${zipRoot}${entry.path}`;
     const filename = encoder.encode(archivePath);
     if (filename.length > 0xffff) throw new Error(`Nama file terlalu panjang untuk ZIP: ${archivePath}`);
@@ -615,53 +614,150 @@ async function createZip(files, rootFolder) {
       const { done, value } = await compressedReader.read();
       if (done) break;
       compressedSize += value.length;
-      if (compressedSize > 0xffffffff) throw new Error("File terlalu besar untuk format ZIP standar di browser ini.");
+      if (!Number.isSafeInteger(compressedSize) || compressedSize > maxUploadBytes) {
+        throw new Error(`Arsip ZIP melebihi batas ${formatSize(maxUploadBytes)}.`);
+      }
       compressedChunks.push(value);
     }
 
-    const localHeader = createZipHeader(0x04034b50, 30 + filename.length);
+    const localZip64 = entry.file.size >= 0xffffffff || compressedSize >= 0xffffffff;
+    const localExtra = localZip64 ? new Uint8Array(20) : new Uint8Array();
+    if (localZip64) {
+      const localExtraView = new DataView(localExtra.buffer);
+      localExtraView.setUint16(0, 0x0001, true);
+      localExtraView.setUint16(2, 16, true);
+      localExtraView.setBigUint64(4, BigInt(entry.file.size), true);
+      localExtraView.setBigUint64(12, BigInt(compressedSize), true);
+    }
+
+    const localHeader = createZipHeader(0x04034b50, 30 + filename.length + localExtra.length);
     const localView = new DataView(localHeader.buffer);
-    localView.setUint16(4, 20, true);
+    localView.setUint16(4, localZip64 ? 45 : 20, true);
     localView.setUint16(6, 0x0800, true);
     localView.setUint16(8, 8, true);
     localView.setUint16(10, dosTime, true);
     localView.setUint16(12, dosDate, true);
     localView.setUint32(14, crc, true);
-    localView.setUint32(18, compressedSize, true);
-    localView.setUint32(22, entry.file.size, true);
+    localView.setUint32(18, localZip64 ? 0xffffffff : compressedSize, true);
+    localView.setUint32(22, localZip64 ? 0xffffffff : entry.file.size, true);
     localView.setUint16(26, filename.length, true);
+    localView.setUint16(28, localExtra.length, true);
     localHeader.set(filename, 30);
+    localHeader.set(localExtra, 30 + filename.length);
     localParts.push(localHeader, ...compressedChunks);
 
-    const centralHeader = createZipHeader(0x02014b50, 46 + filename.length);
+    const centralZip64 = localZip64 || localOffset >= 0xffffffff;
+    const centralExtra = centralZip64 ? new Uint8Array(28) : new Uint8Array();
+    if (centralZip64) {
+      const centralExtraView = new DataView(centralExtra.buffer);
+      centralExtraView.setUint16(0, 0x0001, true);
+      centralExtraView.setUint16(2, 24, true);
+      centralExtraView.setBigUint64(4, BigInt(entry.file.size), true);
+      centralExtraView.setBigUint64(12, BigInt(compressedSize), true);
+      centralExtraView.setBigUint64(20, BigInt(localOffset), true);
+      zip64Required = true;
+    }
+
+    const centralHeader = createZipHeader(0x02014b50, 46 + filename.length + centralExtra.length);
     const centralView = new DataView(centralHeader.buffer);
-    centralView.setUint16(4, 20, true);
-    centralView.setUint16(6, 20, true);
+    centralView.setUint16(4, centralZip64 ? 45 : 20, true);
+    centralView.setUint16(6, centralZip64 ? 45 : 20, true);
     centralView.setUint16(8, 0x0800, true);
     centralView.setUint16(10, 8, true);
     centralView.setUint16(12, dosTime, true);
     centralView.setUint16(14, dosDate, true);
     centralView.setUint32(16, crc, true);
-    centralView.setUint32(20, compressedSize, true);
-    centralView.setUint32(24, entry.file.size, true);
+    centralView.setUint32(20, centralZip64 ? 0xffffffff : compressedSize, true);
+    centralView.setUint32(24, centralZip64 ? 0xffffffff : entry.file.size, true);
     centralView.setUint16(28, filename.length, true);
-    centralView.setUint32(42, localOffset, true);
+    centralView.setUint16(30, centralExtra.length, true);
+    centralView.setUint32(42, centralZip64 ? 0xffffffff : localOffset, true);
     centralHeader.set(filename, 46);
+    centralHeader.set(centralExtra, 46 + filename.length);
     centralParts.push(centralHeader);
     localOffset += localHeader.length + compressedSize;
-    if (localOffset > 0xffffffff) throw new Error("Folder terlalu besar untuk format ZIP standar di browser ini.");
+    if (localOffset >= 0xffffffff) zip64Required = true;
+    if (!Number.isSafeInteger(localOffset) || localOffset > maxUploadBytes) {
+      throw new Error(`Arsip ZIP melebihi batas ${formatSize(maxUploadBytes)}.`);
+    }
   }
 
   const centralDirectory = new Blob(centralParts);
   const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
-  if (centralSize > 0xffffffff) throw new Error("Daftar isi folder terlalu besar untuk format ZIP standar.");
+  const zip64EndOffset = localOffset + centralSize;
+  zip64Required = zip64Required || files.length >= 0xffff
+    || centralSize >= 0xffffffff || zip64EndOffset >= 0xffffffff;
+  const archiveSize = zip64EndOffset + (zip64Required ? 56 + 20 : 0) + 22;
+  if (!Number.isSafeInteger(archiveSize) || archiveSize > maxUploadBytes) {
+    throw new Error(`Arsip ZIP melebihi batas ${formatSize(maxUploadBytes)}.`);
+  }
+
+  const zip64Parts = [];
+  if (zip64Required) {
+    const zip64EndRecord = createZipHeader(0x06064b50, 56);
+    const zip64EndView = new DataView(zip64EndRecord.buffer);
+    zip64EndView.setBigUint64(4, 44n, true);
+    zip64EndView.setUint16(12, 45, true);
+    zip64EndView.setUint16(14, 45, true);
+    zip64EndView.setBigUint64(24, BigInt(files.length), true);
+    zip64EndView.setBigUint64(32, BigInt(files.length), true);
+    zip64EndView.setBigUint64(40, BigInt(centralSize), true);
+    zip64EndView.setBigUint64(48, BigInt(localOffset), true);
+
+    const zip64Locator = createZipHeader(0x07064b50, 20);
+    const locatorView = new DataView(zip64Locator.buffer);
+    locatorView.setBigUint64(8, BigInt(zip64EndOffset), true);
+    locatorView.setUint32(16, 1, true);
+    zip64Parts.push(zip64EndRecord, zip64Locator);
+  }
+
   const endRecord = createZipHeader(0x06054b50, 22);
   const endView = new DataView(endRecord.buffer);
-  endView.setUint16(8, files.length, true);
-  endView.setUint16(10, files.length, true);
-  endView.setUint32(12, centralSize, true);
-  endView.setUint32(16, localOffset, true);
-  return new Blob([...localParts, centralDirectory, endRecord], { type: "application/zip" });
+  endView.setUint16(8, zip64Required ? 0xffff : files.length, true);
+  endView.setUint16(10, zip64Required ? 0xffff : files.length, true);
+  endView.setUint32(12, zip64Required ? 0xffffffff : centralSize, true);
+  endView.setUint32(16, zip64Required ? 0xffffffff : localOffset, true);
+  return new Blob([...localParts, centralDirectory, ...zip64Parts, endRecord], { type: "application/zip" });
+}
+
+async function uploadArchiveWithTus(archivePath, archive) {
+  if (!window.tus?.Upload) throw new Error("Komponen unggah resumable tidak tersedia. Muat ulang halaman dan coba lagi.");
+  const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!session?.access_token) throw new Error("Sesi login berakhir. Masuk kembali sebelum mengunggah.");
+
+  const projectUrl = new URL(supabaseConfig.url);
+  const storageHostname = projectUrl.hostname.replace(/\.supabase\.co$/, ".storage.supabase.co");
+  if (storageHostname === projectUrl.hostname) throw new Error("URL Supabase tidak mendukung endpoint unggah resumable.");
+  const endpoint = `${projectUrl.protocol}//${storageHostname}/storage/v1/upload/resumable`;
+
+  await new Promise((resolve, reject) => {
+    const upload = new window.tus.Upload(archive, {
+      endpoint,
+      chunkSize: 6 * 1024 * 1024,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      headers: {
+        authorization: `Bearer ${session.access_token}`,
+        apikey: supabaseConfig.publishableKey,
+        "x-upsert": "false"
+      },
+      metadata: {
+        bucketName: supabaseConfig.bucket,
+        objectName: archivePath,
+        contentType: "application/zip",
+        cacheControl: "3600"
+      },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      onError: reject,
+      onProgress(bytesUploaded, bytesTotal) {
+        const percentage = Math.floor((bytesUploaded / bytesTotal) * 100);
+        uploadStatus.textContent = `Mengunggah arsip: ${percentage}% (${formatSize(bytesUploaded)} dari ${formatSize(bytesTotal)}).`;
+      },
+      onSuccess: resolve
+    });
+    upload.start();
+  });
 }
 
 function sanitizeFilename(name) {
@@ -930,12 +1026,7 @@ uploadForm.addEventListener("submit", async (event) => {
     if (archive.size > maxUploadBytes) {
       throw new Error(`Arsip ZIP melebihi batas ${formatSize(maxUploadBytes)}.`);
     }
-    const { error: archiveError } = await bucket.upload(archivePath, archive, {
-      contentType: "application/zip",
-      cacheControl: "3600",
-      upsert: false
-    });
-    if (archiveError) throw archiveError;
+    await uploadArchiveWithTus(archivePath, archive);
     uploadedPaths.push(archivePath);
 
     if (previewFile && previewPath) {

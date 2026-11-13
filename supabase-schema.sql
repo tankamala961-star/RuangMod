@@ -6,7 +6,7 @@ create table if not exists public.mods (
   category text not null check (category in ('UI', 'Gameplay', 'Vehicles', 'Voice pack', 'Tools', 'Audio', 'Visual')),
   description text not null check (char_length(description) between 1 and 500),
   version text not null check (char_length(version) between 1 and 20),
-  size_bytes bigint not null check (size_bytes between 1 and 104857600),
+  size_bytes bigint not null check (size_bytes between 1 and 5368709120),
   sha256 text not null unique check (sha256 ~ '^[0-9a-f]{64}$'),
   archive_path text not null,
   preview_path text,
@@ -28,6 +28,11 @@ create table if not exists public.mods (
     and version ~ '[^[:space:]]'
   )
 );
+
+alter table public.mods drop constraint if exists mods_size_bytes_check;
+alter table public.mods
+  add constraint mods_size_bytes_check
+  check (size_bytes between 1 and 5368709120);
 
 alter table public.mods drop constraint if exists mods_category_check;
 update public.mods set category = 'Vehicles' where category = 'Vehicle';
@@ -235,7 +240,7 @@ values (
   'ruangmod-mods',
   'ruangmod-mods',
   false,
-  104857600,
+  5368709120,
   array['application/zip', 'image/png', 'image/jpeg', 'image/webp']
 )
 on conflict (id) do update set
