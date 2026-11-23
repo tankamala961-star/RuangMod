@@ -23,6 +23,12 @@ const palettes = {
 const filters = document.querySelector("#category-filters");
 const categoryCountStatus = document.querySelector("#category-count-status");
 const searchInput = document.querySelector("#search-input");
+const categoryView = document.querySelector("#category-view");
+const categoryViewBack = document.querySelector("#category-view-back");
+const categoryViewEyebrow = document.querySelector("#category-view-eyebrow");
+const categoryViewTitle = document.querySelector("#category-view-title");
+const categoryViewSearch = document.querySelector("#category-view-search");
+const categoryViewGrid = document.querySelector("#category-view-grid");
 const catalogStatus = document.querySelector("#catalog-status");
 const catalogRetryButton = document.querySelector("#catalog-retry");
 const dialog = document.querySelector("#mod-dialog");
@@ -48,6 +54,7 @@ const signOutButton = document.querySelector("#sign-out-button");
 const googleSignInButton = document.querySelector("#google-sign-in-button");
 let mods = [];
 let activeCategory = "Semua";
+let openCategory = "";
 let analyzedFolder = null;
 let previewSelectionUrl = "";
 let storageReady = false;
@@ -220,14 +227,6 @@ function renderFilters() {
       ${categories.map((category) => {
         const [background, color, symbol, description] = palettes[category];
         const count = displayedCounts.get(category);
-        const categoryMods = mods.filter((mod) => mod.category === category && matchesSearch(mod));
-        const showMods = activeCategory === category;
-        const emptyMessage = categoryMods.length === 0 && (activeCategory === category || (activeCategory === "Semua" && query))
-          ? `<div class="category-mod-empty">
-              <span>${query ? "Tidak ada mod yang cocok dengan pencarian." : `Belum ada mod di kategori ${escapeHtml(category)}.`}</span>
-              ${query || activeCategory !== category ? "" : `<button class="create-category-mod" type="button" data-create-category="${escapeHtml(category)}">Bagikan mod pertama di ${escapeHtml(category)}</button>`}
-            </div>`
-          : "";
         return `
           <article class="category-card${category === activeCategory ? " category-card-active" : ""}">
             <span class="category-card-art" style="--card-bg:${background};--card-color:${color}" aria-hidden="true">
@@ -236,11 +235,7 @@ function renderFilters() {
             <span class="category-card-title">${escapeHtml(category)}</span>
             <span class="category-card-description">${escapeHtml(description)}</span>
             <span class="category-card-count">${formatCount(count)} mod</span>
-            <button class="category-card-open" type="button" data-category="${escapeHtml(category)}" aria-pressed="${category === activeCategory}" aria-expanded="${showMods}">BUKA</button>
-            <div class="category-mod-list"${showMods ? "" : " hidden"}>
-              ${categoryMods.map(renderModCard).join("")}
-              ${emptyMessage}
-            </div>
+            <button class="category-card-open" type="button" data-category="${escapeHtml(category)}" aria-label="Buka koleksi ${escapeHtml(category)}">BUKA</button>
           </article>
         `;
       }).join("")}
@@ -317,6 +312,64 @@ function getPreviewUrl(mod) {
 
 function renderMods() {
   renderFilters();
+}
+
+function openCategoryView(category) {
+  if (!palettes[category]) return;
+  openCategory = category;
+  categoryViewSearch.value = "";
+  renderCategoryView();
+  categoryView.hidden = false;
+  document.body.classList.add("category-view-open");
+  categoryViewBack.focus();
+  categoryView.scrollTop = 0;
+}
+
+function closeCategoryView() {
+  if (categoryView.classList.contains("is-closing")) return;
+  categoryView.classList.add("is-closing");
+  document.body.classList.remove("category-view-open");
+  categoryViewBack.disabled = true;
+
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const finishClose = () => {
+    categoryView.hidden = true;
+    categoryView.classList.remove("is-closing");
+    categoryViewBack.disabled = false;
+    openCategory = "";
+    activeCategory = "Semua";
+    renderFilters();
+    document.querySelector("#collection-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  if (prefersReducedMotion) {
+    finishClose();
+  } else {
+    window.setTimeout(finishClose, 460);
+  }
+}
+
+function renderCategoryView() {
+  const [background, color, symbol, description] = palettes[openCategory];
+  const query = categoryViewSearch.value.trim().toLocaleLowerCase("id");
+  const categoryMods = mods.filter((mod) => {
+    if (mod.category !== openCategory) return false;
+    const searchableText = `${mod.name} ${mod.category} ${mod.description} ${mod.author || ""}`.toLocaleLowerCase("id");
+    return searchableText.includes(query);
+  });
+
+  categoryViewEyebrow.textContent = `${description} · ${categoryMods.length} mod`;
+  categoryViewTitle.innerHTML = `${escapeHtml(openCategory)}<span class="brand-accent">.</span>`;
+  categoryView.style.setProperty("--category-background", background);
+  categoryView.style.setProperty("--category-color", color);
+  categoryViewGrid.innerHTML = categoryMods.length
+    ? categoryMods.map(renderModCard).join("")
+    : `<div class="category-view-empty">
+        <span class="category-view-empty-symbol" aria-hidden="true">${escapeHtml(symbol)}</span>
+        <strong>${query ? "Mod tidak ditemukan." : "Belum ada mod di kategori ini."}</strong>
+        <span>${query ? "Coba kata pencarian yang lain." : "Kamu bisa menjadi orang pertama yang membagikannya."}</span>
+        ${query ? "" : `<button class="primary-button" type="button" data-create-category="${escapeHtml(openCategory)}">Bagikan mod <span aria-hidden="true">↑</span></button>`}
+      </div>`;
 }
 
 function showDetails(mod) {
@@ -782,11 +835,36 @@ filters.addEventListener("click", (event) => {
 
   const categoryButton = event.target.closest("[data-category]");
   if (!categoryButton) return;
-  activeCategory = categoryButton.dataset.category;
-  renderMods();
+  if (categoryButton.dataset.category === "Semua") {
+    activeCategory = "Semua";
+    renderMods();
+    return;
+  }
+  openCategoryView(categoryButton.dataset.category);
 });
 
 searchInput.addEventListener("input", renderMods);
+categoryViewSearch.addEventListener("input", renderCategoryView);
+categoryViewBack.addEventListener("click", closeCategoryView);
+categoryView.addEventListener("click", (event) => {
+  const detailsButton = event.target.closest("[data-details]");
+  if (detailsButton) {
+    const mod = mods.find((item) => item.id === detailsButton.dataset.details);
+    if (mod) showDetails(mod);
+    return;
+  }
+
+  const createButton = event.target.closest("[data-create-category]");
+  if (createButton) {
+    closeCategoryView();
+    uploadForm.elements.namedItem("category").value = createButton.dataset.createCategory;
+    document.querySelector("#bagikan").scrollIntoView({ behavior: "smooth" });
+    uploadForm.elements.namedItem("name").focus({ preventScroll: true });
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !categoryView.hidden) closeCategoryView();
+});
 
 catalogRetryButton.addEventListener("click", async () => {
   catalogRetryButton.disabled = true;

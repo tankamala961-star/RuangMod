@@ -79,6 +79,67 @@ kbd { padding: 2px 6px; border: 1px solid var(--line); border-radius: 3px; color
 .category-card-count { margin-top: auto; color: #888c80; font: 11px var(--mono); text-align: right; }
 .category-card-open { align-self: flex-start; min-width: 76px; margin: 12px 18px 0; padding: 7px 12px; border: 1px solid #484b42; border-radius: 4px; background: transparent; color: var(--text); font: 10px var(--mono); letter-spacing: .8px; cursor: pointer; transition: border-color .2s, background .2s, color .2s; }
 .category-card-open:hover, .category-card-open[aria-pressed="true"] { border-color: var(--accent); background: #c9f36a12; color: var(--accent); }
+body.category-view-open { overflow: hidden; }
+.category-view { position: fixed; z-index: 20; inset: 72px 0 0; overflow-y: auto; background: var(--bg); transform-origin: center 30%; animation: category-view-enter 460ms cubic-bezier(.22, 1, .36, 1) both; }
+.category-view[hidden] { display: none; }
+body.category-view-open main > :not(.category-view) {
+  filter: blur(5px);
+  opacity: .72;
+  transition: filter 460ms cubic-bezier(.22, 1, .36, 1), opacity 460ms ease;
+}
+@keyframes category-view-enter {
+  0% {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translateY(18px) scale(.985);
+  }
+  65% {
+    opacity: 1;
+    filter: blur(3px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+.category-view.is-closing {
+  pointer-events: none;
+  animation: category-view-exit 460ms cubic-bezier(.22, 1, .36, 1) both;
+}
+body:not(.category-view-open) main > :not(.category-view) {
+  filter: blur(0);
+  opacity: 1;
+  transition: filter 460ms cubic-bezier(.22, 1, .36, 1), opacity 460ms ease;
+}
+@keyframes category-view-exit {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+  35% {
+    opacity: 1;
+    filter: blur(3px);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translateY(18px) scale(.985);
+  }
+}
+.category-view-inner { width: min(100%, 1600px); min-height: 100%; margin-inline: auto; padding: clamp(32px, 5vw, 58px) var(--page-gutter); }
+.category-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.category-view-header .eyebrow { margin-bottom: 8px; color: var(--category-color); }
+.category-view-header h2 { margin: 0; }
+.category-view-back { position: fixed; z-index: 21; top: 84px; right: clamp(20px, 7.5vw, 112px); display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid #484b42; border-radius: 4px; background: var(--panel); color: var(--text); font-size: 11px; cursor: pointer; }
+.category-view-back span { color: var(--accent); font-size: 16px; line-height: 1; }
+.category-view-back:hover { border-color: var(--accent); color: var(--accent); }
+.category-view-search { width: min(320px, 100%); margin-bottom: 24px; }
+.category-view-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(16px, 2vw, 24px); }
+.category-view-empty { grid-column: 1 / -1; display: grid; min-height: 330px; place-items: center; align-content: center; gap: 10px; border: 1px dashed var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); text-align: center; }
+.category-view-empty-symbol { color: var(--category-color); font: 58px var(--display); }
+.category-view-empty strong { color: var(--text); font: 600 20px var(--display); }
 .category-mod-list { display: grid; gap: 12px; margin: 18px 12px 0; }
 .category-mod-list[hidden] { display: none; }
 .category-mod-empty { display: grid; gap: 12px; padding: 16px; border: 1px dashed var(--line); border-radius: 5px; color: var(--muted); font-size: 11px; line-height: 1.6; }
@@ -186,6 +247,7 @@ kbd { padding: 2px 6px; border: 1px solid var(--line); border-radius: 3px; color
   .hero { padding-right: 8%; padding-left: 8%; }
   .hero-foot { right: 8%; left: 8%; }
   .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .category-view-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) {
   html { scroll-padding-top: 72px; }
