@@ -314,7 +314,17 @@ function renderMods() {
   renderFilters();
 }
 
-function openCategoryView(category) {
+function getCategoryFromUrl() {
+  const hash = window.location.hash;
+  if (!hash.startsWith("#kategori=")) return "";
+  try {
+    return decodeURIComponent(hash.slice("#kategori=".length));
+  } catch {
+    return "";
+  }
+}
+
+function openCategoryView(category, updateHistory = true) {
   if (!palettes[category]) return;
   openCategory = category;
   categoryViewSearch.value = "";
@@ -323,10 +333,20 @@ function openCategoryView(category) {
   document.body.classList.add("category-view-open");
   categoryViewBack.focus();
   categoryView.scrollTop = 0;
+  if (updateHistory) {
+    const categoryUrl = `${window.location.pathname}${window.location.search}#kategori=${encodeURIComponent(category)}`;
+    if (window.location.hash !== `#kategori=${encodeURIComponent(category)}`) {
+      window.history.pushState({ ruangmodCategory: category }, "", categoryUrl);
+    }
+  }
 }
 
-function closeCategoryView() {
+function closeCategoryView(useHistory = true) {
   if (categoryView.classList.contains("is-closing")) return;
+  if (useHistory && window.history.state?.ruangmodCategory) {
+    window.history.back();
+    return;
+  }
   categoryView.classList.add("is-closing");
   document.body.classList.remove("category-view-open");
   categoryViewBack.disabled = true;
@@ -846,6 +866,22 @@ filters.addEventListener("click", (event) => {
 searchInput.addEventListener("input", renderMods);
 categoryViewSearch.addEventListener("input", renderCategoryView);
 categoryViewBack.addEventListener("click", closeCategoryView);
+window.addEventListener("popstate", () => {
+  const category = getCategoryFromUrl();
+  if (category && palettes[category]) {
+    openCategoryView(category, false);
+  } else if (!categoryView.hidden) {
+    closeCategoryView(false);
+  }
+});
+window.addEventListener("hashchange", () => {
+  const category = getCategoryFromUrl();
+  if (category && palettes[category] && openCategory !== category) {
+    openCategoryView(category, false);
+  } else if (!category && !categoryView.hidden) {
+    closeCategoryView(false);
+  }
+});
 categoryView.addEventListener("click", (event) => {
   const detailsButton = event.target.closest("[data-details]");
   if (detailsButton) {
@@ -1173,6 +1209,10 @@ document.addEventListener("keydown", (event) => {
 
 async function initialize() {
   renderMods();
+  const initialCategory = getCategoryFromUrl();
+  if (initialCategory && palettes[initialCategory]) {
+    openCategoryView(initialCategory, false);
+  }
   catalogStatus.hidden = false;
   catalogStatus.textContent = "Memuat mod terbaru dari Supabase...";
   catalogRetryButton.hidden = true;
